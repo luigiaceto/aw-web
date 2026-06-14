@@ -88,6 +88,9 @@ pyrightconfig.json
 history.json
 config.toml
 aw-cronologia.csv
+*.sqlite
+*.sqlite3
+*.db
 
 # Fixtures for tests
 tests/fixtures/

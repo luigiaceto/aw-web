@@ -65,7 +65,8 @@ uv tool install --force git+https://github.com/luigiaceto/aw-cli.git@main
 Se hai gia clonato la repository e vuoi installare la copia locale:
 
 ```bash
-cd /Users/luigi/Documents/projects/aw-cli
+git clone https://github.com/luigiaceto/aw-cli.git
+cd aw-cli
 uv tool install -e . --force
 ```
 
@@ -80,10 +81,12 @@ aw-web
 Se non vuoi installare il comando globalmente, puoi avviare direttamente dal progetto:
 
 ```bash
-uv run --project /Users/luigi/Documents/projects/aw-cli aw-web
+git clone https://github.com/luigiaceto/aw-cli.git
+cd aw-cli
+uv run aw-web
 ```
 
-Oppure, se sei gia dentro la cartella del progetto:
+Se sei gia dentro la cartella del progetto:
 
 ```bash
 uv run aw-web
