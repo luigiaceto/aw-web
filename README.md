@@ -1,146 +1,244 @@
-# aw-cli
-<h3 align="center">
+# aw-web
 
-Guarda anime dal terminale e molto altro!
+Interfaccia web locale per navigare e guardare anime usando i provider gia supportati dal progetto: [AnimeWorld](https://www.animeworld.ac/) e [AnimeUnity](https://www.animeunity.so/).
 
- Gli anime vengono presi da [Animeworld](https://www.animeworld.ac/) e [Animeunity](https://www.animeunity.so/)
-
-</h3>
-
-## Anteprima
-https://github.com/fexh10/aw-cli/assets/90156014/88e1c2e2-bb7f-4002-8784-26f70861e164
+`aw-web` avvia un sito locale su `http://127.0.0.1:8765` con ricerca anime, ultimi episodi, watchlist SQLite, copertine AniList e player integrato nel browser con fallback a proxy locale. Puoi anche aprire gli episodi con MPV/VLC.
 
 ## Indice
 
-- [aw-cli](#aw-cli)
-  - [Anteprima](#anteprima)
-  - [Indice](#indice)
-  - [Installazione](#installazione)
-  - [Problemi noti](#problemi-noti)
-  - [Utilizzo](#utilizzo)
-  - [Crediti](#crediti)
-
+- [Installazione](#installazione)
+- [Avvio](#avvio)
+- [Utilizzo](#utilizzo)
+- [Watchlist e Database](#watchlist-e-database)
+- [Player Browser e MPV/VLC](#player-browser-e-mpvlc)
+- [Domande Frequenti](#domande-frequenti)
+- [Problemi Noti](#problemi-noti)
 
 ## Installazione
 
-Lo script funziona sia con [MPV](https://mpv.io/installation/) che con [VLC](https://www.videolan.org/vlc/index.it.html).
+Sono richiesti:
 
-È richiesta l'installazione di [fzf](https://github.com/junegunn/fzf?tab=readme-ov-file#installation).
+- [uv](https://github.com/astral-sh/uv)
+- Python 3.10+
+- MPV o VLC, consigliato come fallback esterno
 
-<details><summary><b>Linux, MacOS, Windows WSL</b></summary>
+Su macOS puoi installare `uv` e `mpv` con:
 
-È consigliato installare `aw-cli` tramite [uv](https://github.com/astral-sh/uv):
-
-```
-uv tool install aw-cli
-```
-
-In alternativa, è possibile usare [pipx](https://pipx.pypa.io/latest/installation/):
-
-```
-pipx install aw-cli
+```bash
+brew install uv mpv
 ```
 
-</details>
+Oppure, se preferisci VLC:
 
-<details><summary><b>Windows</b></summary>
-
-Il supporto per Windows è mantenuto solamente tramite WSL. Nel caso si voglia usare Powershell, è possibile installare la versione Legacy, che non riceverà più aggiornamenti. È necessario avere [git](https://www.git-scm.com/download/win) e [uv](https://github.com/astral-sh/uv):
-
-```
-uv tool install git+https://github.com/fexh10/aw-cli.git@winLegacy
+```bash
+brew install uv vlc
 ```
 
-In alternativa è possibile usare [pipx](https://pipx.pypa.io/latest/installation/):
+### Installazione Globale Da GitHub
 
-```
-pipx install git+https://github.com/fexh10/aw-cli.git@winLegacy
-```
+Puoi installare `aw-web` direttamente da questa repository GitHub:
 
-</details>
-</details>
-
-<details><summary><b>Android</b></summary>
-
-Android richiede l'installazione di [Termux](https://github.com/termux/termux-app/releases).
-
-```
-pkg update && pkg upgrade
-pkg install python3 fzf uv
-uv tool install aw-cli
+```bash
+uv tool install --force git+https://github.com/luigiaceto/aw-cli.git
 ```
 
-</details>
+Dopo l'installazione puoi avviare l'app da qualunque cartella con:
 
-## Problemi noti
+```bash
+aw-web
+```
 
-- Se è impossibile avviare `aw-cli`, è possibile che non si abbia la cartella degli script Python aggiunta al path. <br /> 
+Per aggiornare `aw-web` all'ultima versione della repository, riesegui:
 
-  <details> <summary><b>Linux/Windows WSL</b></summary>
-  Aggiungere la seguente linea al file di profilo (.bashrc, .zshrc, o altro):
+```bash
+uv tool install --force git+https://github.com/luigiaceto/aw-cli.git
+```
 
-  ```
-  export PATH=$PATH:$HOME/.local/bin
-  ```
-  Riavviare il terminale o eseguire `source ~/.bashrc`.
+Se vuoi installare da un branch specifico, per esempio `main`:
 
-  </details>
+```bash
+uv tool install --force git+https://github.com/luigiaceto/aw-cli.git@main
+```
 
-  <details> <summary><b>MacOS</b></summary>
-  Aggiungere la seguente linea al file di profilo (.bashrc, .zshrc, o altro):
+### Installazione Globale Da Questa Cartella
 
-  ```
-  export PATH=$PATH:$HOME/Library/Python/3.x/bin
-  ```
-  Sostituire `3.x` con la propria versione di Python. <br>
-  Riavviare il terminale o eseguire `source ~/.bashrc`. 
-  </details>
+Se hai gia clonato la repository e vuoi installare la copia locale:
 
-  <details> <summary><b>Windows Legacy</b></summary>
-  Inserire da linea di comando:
+```bash
+cd /Users/luigi/Documents/projects/aw-cli
+uv tool install -e . --force
+```
 
-  ```
-  setx PATH "%PATH%;%APPDATA%\Local\Programs\Python\Python3x\Scripts
-  ```
-  Sostituire `3.x` con la propria versione di Python. <br/>
-  Se necessario, riavviare il sistema. 
-  </details>
+Dopo l'installazione puoi avviare l'app da qualunque cartella con:
 
-- Se il programma si avvia ma appare "Errore di connessione", potrebbe essere un problema relativo ai certificati SSL. Scaricare il certificato `SSL.com TLS Transit ECC CA R2` al seguente [link](https://ssl.com/repo/certs/SSL.com-TLS-T-ECC-R2.pem) ed eseguire il comando:
+```bash
+aw-web
+```
 
-  ```bash
-  trust anchor SSL.com-TLS-T-ECC-R2.pem
-  ```
+### Avvio Senza Installazione Globale
+
+Se non vuoi installare il comando globalmente, puoi avviare direttamente dal progetto:
+
+```bash
+uv run --project /Users/luigi/Documents/projects/aw-cli aw-web
+```
+
+Oppure, se sei gia dentro la cartella del progetto:
+
+```bash
+uv run aw-web
+```
+
+## Avvio
+
+Avvia il server locale con:
+
+```bash
+aw-web
+```
+
+L'app verra aperta nel browser su:
+
+```text
+http://127.0.0.1:8765
+```
+
+Per fermarla, torna nel terminale e premi `Ctrl+C`.
 
 ## Utilizzo
+
+Dalla home puoi:
+
+- vedere gli ultimi episodi usciti;
+- cercare anime;
+- aprire la pagina dettaglio di un anime;
+- aggiungere o rimuovere anime dalla watchlist;
+- vedere a che episodio eri arrivato;
+- vedere il badge `Nuovo episodio` quando esiste un episodio successivo all'ultimo visto.
+
+Nella pagina anime puoi:
+
+- leggere info e trama;
+- vedere la copertina recuperata da AniList;
+- scegliere un episodio;
+- guardarlo nel browser;
+- aprirlo in MPV/VLC.
+
+## Watchlist e Database
+
+La watchlist viene salvata in SQLite qui:
+
+```text
+~/.aw-cli/web.sqlite3
 ```
-usage: aw-cli [-h] [-v] [-c [{r}]] [-l [{a,s,d,t}]] [-i] [-s] [-d] [-o] [-p] [-u [UPDATE]] [-a]
 
-Guarda anime dal terminale e molto altro!
+Nel database vengono salvati:
 
-Informazioni:
-  -h, --help            mostra questo messaggio
-  -v, --versione        stampa la versione del programma
+- anime in watchlist;
+- provider usato;
+- ultimo episodio visto;
+- progresso dell'episodio nel player browser;
+- copertine AniList cacheate;
+- metadati necessari per riaprire gli anime.
 
-Opzioni:
-  -c [{r}], --cronologia [{r}]
-                        continua a guardare un anime dalla cronologia. 'r' per rimuovere un anime (opzionale)
-  -l [{a,s,d,t}], --lista [{a,s,d,t}]
-                        lista degli ultimi anime usciti. Filtri: a = all, s = sub, d = dub, t = tendenze. Default 'a'
-  -i, --info            visualizza le informazioni e la trama di un anime
-  -s, --syncplay        usa syncplay per guardare un anime insieme ai tuoi amici
-  -d, --download        scarica gli episodi che preferisci
-  -o, --offline         apri gli episodi scaricati precedentemente direttamente dal terminale
-  -p, --privato         guarda un episodio senza che si aggiorni la cronologia o AniList
-  -u [UPDATE], --update [UPDATE]
-                        aggiorna il programma
+## Player Browser e MPV/VLC
 
-Configurazione:
-  -a, --configurazione  avvia il menu di configurazione                                                    
+`aw-web` supporta due modalita di riproduzione.
+
+### Browser
+
+Il player browser prova prima la modalita diretta:
+
+```text
+server video -> browser
 ```
 
-## Crediti
+Se il browser non riesce a riprodurre il video, passa automaticamente al proxy locale:
 
-Progetto ispirato a [ani-cli](https://github.com/pystardust/ani-cli).
+```text
+server video -> aw-web -> browser
+```
 
-Un ringraziamento speciale a [axtrat](https://github.com/axtrat) per l'aiuto nella realizzazione del progetto.
+Nella pagina player viene mostrato un badge in alto a destra:
+
+- verde: `Diretto`
+- blu: `Buffering`
+- giallo: `Proxy fallback`
+- rosso: `Errore video`
+
+### MPV/VLC
+
+MPV/VLC resta disponibile come fallback esterno. Di solito e piu efficiente e piu robusto del player browser, soprattutto per seek, codec e stream problematici.
+
+## Domande Frequenti
+
+### La guida cambia tanto rispetto ad aw-cli?
+
+Si. `aw-cli` era pensato per essere usato dal terminale con menu testuali. `aw-web` invece avvia una web app locale.
+
+Il flusso ora e:
+
+```text
+aw-web -> browser -> ricerca/watchlist/player
+```
+
+Invece del vecchio flusso:
+
+```text
+aw-cli -> terminale -> fzf -> MPV/VLC
+```
+
+### Posso usare `uv tool install aw-web`?
+
+Non da GitHub.
+
+`uv tool install aw-web` funziona solo se esiste un pacchetto pubblicato con nome `aw-web` su PyPI o su un indice Python configurato.
+
+Da GitHub devi usare l'URL della repository:
+
+```bash
+uv tool install --force git+https://github.com/luigiaceto/aw-cli.git
+```
+
+Il comando installato sara comunque:
+
+```bash
+aw-web
+```
+
+Se in futuro il pacchetto venisse pubblicato su PyPI come `aw-web`, allora avrebbe senso usare:
+
+```bash
+uv tool install aw-web
+```
+
+### Perche non si usa piu `aw-cli` da questo progetto?
+
+Questo progetto ora espone solo il comando web:
+
+```toml
+aw-web = "aw_cli.web.app:main"
+```
+
+Se hai gia `aw-cli` installato da un'altra cartella o da PyPI, quello resta separato.
+
+## Problemi Noti
+
+- Se `aw-web` non viene trovato dopo l'installazione, aggiorna il PATH dei tool `uv`:
+
+  ```bash
+  uv tool update-shell
+  ```
+
+  Poi chiudi e riapri il terminale.
+
+- Se il player browser fallisce, prova il pulsante MPV/VLC.
+
+- Se MPV/VLC non si apre, verifica che sia installato e disponibile nel PATH:
+
+  ```bash
+  which mpv
+  which vlc
+  ```
+
+- Se appare un errore di certificati SSL, potrebbe essere necessario aggiornare i certificati del sistema.

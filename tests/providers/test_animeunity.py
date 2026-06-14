@@ -59,6 +59,22 @@ class TestAnimeunity:
             assert episodes["1"] == "12345"
             assert episodes["2"] == "12346"
 
+    def test_animeunity_episodes_without_episode_info(self, au):
+        anime = Anime("Naruto", "1469", last_ep="2")
+        mocked_episodes = {
+            "episodes": [
+                {"number": 1, "id": 12345},
+                {"number": 2, "id": 12346},
+            ]
+        }
+
+        with patch.object(au, "Client") as mock_client:
+            mock_client.get.return_value.json.return_value = mocked_episodes
+            mock_client.get.return_value.raise_for_status = lambda: None
+
+            episodes = au._episodes(anime)
+            assert episodes == {"1": "12345", "2": "12346"}
+
     def test_animeunity_episode_link(self, au):
         anime = Anime("Naruto", "1469")
         episode = Anime.Episode(anime, "1", ref="12345")

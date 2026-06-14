@@ -75,7 +75,11 @@ class Animeunity(Provider):
     def _episodes(self, anime: Anime) -> dict[str, str]:
         episodes = {}
         start_range = 0
-        episode_count = max(int(anime.last_ep), int(anime.info["Episodi"]) if anime.info["Episodi"].isdigit() else 0) # potenzialmente non numerico
+        episodes_info = anime.info.get("Episodi", "0")
+        episode_count = max(
+            int(anime.last_ep) if anime.last_ep.isdigit() else 0,
+            int(episodes_info) if episodes_info.isdigit() else 0,
+        ) # potenzialmente non numerico
         # Fetch episodes in chunks
         while start_range <= episode_count:
             end_range = min(start_range + 119, episode_count)
