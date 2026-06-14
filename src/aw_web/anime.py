@@ -1,8 +1,6 @@
 from __future__ import annotations
 from enum import Enum
 from functools import total_ordering
-from rich.console import Console, ConsoleOptions, RenderResult
-from rich.text import Text
 
 
 class AnimeStatus(Enum):
@@ -156,24 +154,6 @@ class Anime:
             return self.effective_episodes_count() >= int(self.last_ep)
         except ValueError:
             return False
-
-    def __rich_console__(self, console: Console, options: ConsoleOptions) -> RenderResult:
-        """
-        Implementazione del protocollo Rich per il rendering della classe.
-        """
-        yield Text(self.name, style="info")
-
-        tmp_info = dict(self.info)
-        tmp_info["Stato"] = self.status.value
-
-        if "Trama" in tmp_info:
-             tmp_info["Trama"] = tmp_info.pop("Trama")
-
-        for key, value in tmp_info.items():
-            text = Text()
-            text.append(f"{key}: ", style="highlight")
-            text.append(str(value), style="general")
-            yield text
 
     @classmethod
     def from_dict(cls, data: dict[str, object]) -> Anime:

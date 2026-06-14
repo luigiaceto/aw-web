@@ -1,6 +1,6 @@
 """Shared runtime state for the local web interface."""
 
-from aw_cli.web.db import WebDatabase
+from aw_web.web.db import WebDatabase
 
 
 HOST = "127.0.0.1"

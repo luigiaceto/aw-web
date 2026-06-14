@@ -3,8 +3,8 @@ import time
 import json
 import pytest
 from pathlib import Path
-from aw_cli.providers.animeworld import Animeworld
-from aw_cli.providers.animeunity import Animeunity
+from aw_web.providers.animeworld import Animeworld
+from aw_web.providers.animeunity import Animeunity
 
 # Le fixtures sono considerate deprecate/scadute dopo 7 giorni
 DEPRECATION_PERIOD_SECONDS = 7 * 24 * 60 * 60  # 7 giorni

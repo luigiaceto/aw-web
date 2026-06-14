@@ -1,8 +1,8 @@
 import pytest
 from pathlib import Path
 from unittest.mock import patch, MagicMock
-from aw_cli.providers.animeworld import Animeworld
-from aw_cli.anime import Anime
+from aw_web.providers.animeworld import Animeworld
+from aw_web.anime import Anime
 
 FIXTURES_DIR = Path(__file__).parent.parent / "fixtures"
 
@@ -76,7 +76,7 @@ class TestAnimeworld:
         video_url = aw._episode_link(anime, episode)
         assert (
             video_url
-            == "https://srv23-abbaia.sweetpixel.org/DDL/ANIME/Naruto/Naruto_Ep_001_SUB_ITA.mp4"
+            == "https://srv23-masafi.sweetpixel.org/DDL/ANIME/Naruto/Naruto_Ep_001_SUB_ITA.mp4"
         )
 
 

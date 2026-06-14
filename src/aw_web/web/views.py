@@ -5,11 +5,11 @@ from __future__ import annotations
 import json
 from urllib.parse import unquote
 
-from aw_cli import providers
-from aw_cli.anime import Anime
-from aw_cli.web.components import card, episode_row, image_html, page, token_play_form, watch_card
-from aw_cli.web.services import DB, default_provider_name, get_cover, get_provider, resolve_episode_url, stream_context
-from aw_cli.web.utils import anime_to_json, esc, provider_error, q
+from aw_web import providers
+from aw_web.anime import Anime
+from aw_web.web.components import card, episode_row, image_html, page, token_play_form, watch_card
+from aw_web.web.services import DB, default_provider_name, get_cover, get_provider, resolve_episode_url, stream_context
+from aw_web.web.utils import anime_to_json, esc, provider_error, q
 
 
 def redirect(location: str) -> bytes:
@@ -23,7 +23,7 @@ def render_home() -> bytes:
     try:
         latest = provider.latest("a")[:36]
         latest_html = "".join(card(anime, provider_name, "Nuovo") for anime in latest)
-    except (Exception, SystemExit) as exc:
+    except Exception as exc:
         latest_html = f'<p class="error">Impossibile caricare gli ultimi episodi: {esc(provider_error(exc))}</p>'
 
     watch_items = DB.watchlist()
@@ -34,9 +34,9 @@ def render_home() -> bytes:
     body = f"""
     <section class="hero">
       <div>
-        <p class="eyebrow">Interfaccia locale</p>
-        <h1>Guarda anime con la comodita del browser, usando aw-cli sotto il cofano.</h1>
-        <p>Apri dettagli, salva la tua watchlist e lancia gli episodi in MPV/VLC.</p>
+        <p class="eyebrow">Interfaccia web locale per aw-web</p>
+        <h1>Guarda anime con la comodità del browser ma senza pubblicità e pop-up.</h1>
+        <p>Apri dettagli, salva la tua watchlist e lancia gli episodi.</p>
       </div>
     </section>
     <section>
@@ -64,7 +64,7 @@ def render_search(params: dict[str, list[str]]) -> bytes:
         results_html = "".join(card(anime, provider_name) for anime in results)
         if not results_html:
             results_html = '<p class="muted">Nessun risultato trovato.</p>'
-    except (Exception, SystemExit) as exc:
+    except Exception as exc:
         results_html = f'<p class="error">Errore ricerca: {esc(provider_error(exc))}</p>'
 
     body = f"""
@@ -103,17 +103,17 @@ def render_anime(params: dict[str, list[str]]) -> bytes:
     episodes_error = ""
     try:
         provider.info_anime(anime)
-    except (Exception, SystemExit) as exc:
+    except Exception as exc:
         info_error = provider_error(exc)
     try:
         if not anime.episodes() or not anime.has_all_episodes():
             provider.episodes(anime)
-    except (Exception, SystemExit) as exc:
+    except Exception as exc:
         episodes_error = provider_error(exc)
 
     cover = get_cover(anime.anilist_id, anime.name)
     item = DB.find_watch_item(provider_name, anime.ref)
-    current_episode = str(item["current_episode"]) if item else anime.curr_ep
+    current_episode = str(item["current_episode"]) if item else "0"
     info_rows = "".join(
         f"<dt>{esc(key)}</dt><dd>{esc(value)}</dd>"
         for key, value in anime.info.items()
@@ -137,7 +137,7 @@ def render_anime(params: dict[str, list[str]]) -> bytes:
         {warnings}
         <p class="eyebrow">{esc(provider_name)}</p>
         <h1>{esc(anime.name)}</h1>
-        <p class="muted">Stato: {esc(anime.status.value)} &middot; Episodio corrente: {esc(current_episode)} &middot; Totale: {esc(anime.last_ep)}</p>
+        <p class="muted">Stato: {esc(anime.status.value)} &middot; Ultimo visto: {esc(current_episode)} &middot; Totale: {esc(anime.last_ep)}</p>
         <div class="row-actions">
           <form action="/watchlist/add" method="post">
             <input type="hidden" name="provider" value="{esc(provider_name)}">

@@ -1,8 +1,11 @@
 from abc import ABC, abstractmethod
-from curses import error
 from httpx import Client, HTTPError  # , AsyncClient
 from ..anime import Anime
 from .. import utilities as ut
+
+
+class ProviderError(RuntimeError):
+    """Raised when a provider cannot complete an operation."""
 
 
 def error_handler(relink=False):
@@ -17,11 +20,9 @@ def error_handler(relink=False):
             except Exception as e:
                 if relink and isinstance(e, HTTPError):
                     return update_link(self, func, *args, **kwargs)
-                ut.console.print(
-                    f"Errore {e.__class__.__name__} durante {func.__name__}: {e}",
-                    style="error",
-                )
-                exit(1)
+                raise ProviderError(
+                    f"Errore {e.__class__.__name__} durante {func.__name__}: {e}"
+                ) from e
 
         return wrapper
 
@@ -33,16 +34,14 @@ def update_link(self, callback, anime: Anime, episode: Anime.Episode | None = No
     Gestisce il caso in cui il riferimento dell'anime o all'episodio non è più valido
     """
     if episode:
-        ut.console.print("Il link dell'episodio è stato cambiato", style="error")
         self.episodes(anime)
         return callback(self, anime, anime.episode(episode.num))
     else:
-        ut.console.print("Il link dell'anime è stato cambiato", style="warning")
         res: list[Anime] | None = self.search(anime.name)
         if not res:
-            ut.console.print(f"Errore o nessun risultato durante la ricerca di {anime.name} su {self.__class__.__name__}", style="error")
-            ut.console.print("Cercarlo manualmente", style="highlight")
-            exit(1)
+            raise ProviderError(
+                f"Errore o nessun risultato durante la ricerca di {anime.name} su {self.__class__.__name__}"
+            )
         anime.ref = res[0].ref
         return callback(self, anime)
 
@@ -85,7 +84,6 @@ class Provider(ABC):
         Returns:
             list[Anime]: la lista degli anime trovati.
         """
-        ut.console.print("Ricerco...", style="warning")
         res = self._search(input)
         for anime in res:
             anime.name = ut.sanitize_filename(anime.name)
@@ -109,7 +107,7 @@ class Provider(ABC):
         Returns:
             list[Anime]: la lista degli anime trovati.
         """
-        specials = ut.config_data["general"]["specials"]
+        specials = bool(ut.config_data.get("general", {}).get("specials", False))
         animes = self._latest(filter, specials)
 
         grouped_animes: dict[str, list[Anime]] = {}
@@ -141,10 +139,11 @@ class Provider(ABC):
         caricandole dentro `anime` che viene modificato di conseguenza.
 
         Args:
-            anime (Anime): l'anime di riferimento.
+        anime (Anime): l'anime di riferimento.
         """
         anime.update_episodes(
-            self._episodes(anime), ut.config_data["general"]["specials"]
+            self._episodes(anime),
+            bool(ut.config_data.get("general", {}).get("specials", False)),
         )
 
     @abstractmethod

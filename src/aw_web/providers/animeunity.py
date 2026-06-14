@@ -2,8 +2,9 @@ import re
 import json
 from html import unescape
 from functools import cached_property
+from httpx import HTTPError
 from ..anime import Anime, AnimeStatus
-from .provider import Provider, HTTPError
+from .provider import Provider
 
 class Animeunity(Provider):
     """

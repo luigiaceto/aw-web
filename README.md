@@ -1,8 +1,8 @@
 # aw-web
 
-Interfaccia web locale per navigare e guardare anime usando i provider gia supportati dal progetto: [AnimeWorld](https://www.animeworld.ac/) e [AnimeUnity](https://www.animeunity.so/).
+Interfaccia web locale per navigare e guardare anime con [AnimeWorld](https://www.animeworld.ac/) e [AnimeUnity](https://www.animeunity.so/).
 
-`aw-web` avvia un sito locale su `http://127.0.0.1:8765` con ricerca anime, ultimi episodi, watchlist SQLite, copertine AniList e player integrato nel browser con fallback a proxy locale. Puoi anche aprire gli episodi con MPV/VLC.
+`aw-web` avvia un sito locale su `http://127.0.0.1:8765` con ricerca anime, ultimi episodi, watchlist, copertine AniList e player integrato nel browser o con MPV/VLC.
 
 ## Indice
 
@@ -34,67 +34,19 @@ Oppure, se preferisci VLC:
 brew install uv vlc
 ```
 
-### Installazione Globale Da GitHub
+### Installazione (Globale) Da GitHub
 
 Puoi installare `aw-web` direttamente da questa repository GitHub:
 
 ```bash
-uv tool install --force git+https://github.com/luigiaceto/aw-cli.git
+uv tool install --force git+https://github.com/luigiaceto/aw-web.git
 ```
 
-Dopo l'installazione puoi avviare l'app da qualunque cartella con:
-
-```bash
-aw-web
-```
-
-Per aggiornare `aw-web` all'ultima versione della repository, riesegui:
-
-```bash
-uv tool install --force git+https://github.com/luigiaceto/aw-cli.git
-```
-
-Se vuoi installare da un branch specifico, per esempio `main`:
-
-```bash
-uv tool install --force git+https://github.com/luigiaceto/aw-cli.git@main
-```
-
-### Installazione Globale Da Questa Cartella
-
-Se hai gia clonato la repository e vuoi installare la copia locale:
-
-```bash
-git clone https://github.com/luigiaceto/aw-cli.git
-cd aw-cli
-uv tool install -e . --force
-```
-
-Dopo l'installazione puoi avviare l'app da qualunque cartella con:
-
-```bash
-aw-web
-```
-
-### Avvio Senza Installazione Globale
-
-Se non vuoi installare il comando globalmente, puoi avviare direttamente dal progetto:
-
-```bash
-git clone https://github.com/luigiaceto/aw-cli.git
-cd aw-cli
-uv run aw-web
-```
-
-Se sei gia dentro la cartella del progetto:
-
-```bash
-uv run aw-web
-```
+Per aggiornare `aw-web` all'ultima versione della repository, ripetere il comando.
 
 ## Avvio
 
-Avvia il server locale con:
+Avvia ad terminale il server locale con:
 
 ```bash
 aw-web
@@ -110,7 +62,7 @@ Per fermarla, torna nel terminale e premi `Ctrl+C`.
 
 ## Utilizzo
 
-Dalla home puoi:
+Dalla home dell'app puoi:
 
 - vedere gli ultimi episodi usciti;
 - cercare anime;
@@ -124,15 +76,14 @@ Nella pagina anime puoi:
 - leggere info e trama;
 - vedere la copertina recuperata da AniList;
 - scegliere un episodio;
-- guardarlo nel browser;
-- aprirlo in MPV/VLC.
+- guardarlo nel browser o aprirlo in MPV/VLC.
 
 ## Watchlist e Database
 
-La watchlist viene salvata in SQLite qui:
+La watchlist viene salvata in un database SQLite dentro:
 
 ```text
-~/.aw-cli/web.sqlite3
+~/.aw-web/web.sqlite3
 ```
 
 Nel database vengono salvati:
@@ -171,59 +122,33 @@ Nella pagina player viene mostrato un badge in alto a destra:
 
 ### MPV/VLC
 
-MPV/VLC resta disponibile come fallback esterno. Di solito e piu efficiente e piu robusto del player browser, soprattutto per seek, codec e stream problematici.
+MPV/VLC resta disponibile come fallback esterno. Di solito è più efficiente e più robusto del player browser, soprattutto per seek, codec e stream problematici.
 
 ## Domande Frequenti
 
-### La guida cambia tanto rispetto ad aw-cli?
+### Come funziona il flusso?
 
-Si. `aw-cli` era pensato per essere usato dal terminale con menu testuali. `aw-web` invece avvia una web app locale.
-
-Il flusso ora e:
+`aw-web` avvia una web app locale e usa il browser come interfaccia principale:
 
 ```text
 aw-web -> browser -> ricerca/watchlist/player
 ```
 
-Invece del vecchio flusso:
-
-```text
-aw-cli -> terminale -> fzf -> MPV/VLC
-```
-
 ### Posso usare `uv tool install aw-web`?
 
-Non da GitHub.
-
-`uv tool install aw-web` funziona solo se esiste un pacchetto pubblicato con nome `aw-web` su PyPI o su un indice Python configurato.
-
-Da GitHub devi usare l'URL della repository:
-
-```bash
-uv tool install --force git+https://github.com/luigiaceto/aw-cli.git
-```
-
-Il comando installato sara comunque:
-
-```bash
-aw-web
-```
-
-Se in futuro il pacchetto venisse pubblicato su PyPI come `aw-web`, allora avrebbe senso usare:
+Se in futuro il pacchetto venisse pubblicato su PyPI come `aw-web`, allora si potrà usare:
 
 ```bash
 uv tool install aw-web
 ```
 
-### Perche non si usa piu `aw-cli` da questo progetto?
+### Quale comando espone il progetto?
 
-Questo progetto ora espone solo il comando web:
+Questo progetto espone solo il comando web:
 
 ```toml
-aw-web = "aw_cli.web.app:main"
+aw-web = "aw_web.web.app:main"
 ```
-
-Se hai gia `aw-cli` installato da un'altra cartella o da PyPI, quello resta separato.
 
 ## Problemi Noti
 

@@ -1,10 +1,9 @@
 # pyright: reportUnusedImport=false
-from .provider import Provider
+from .provider import Provider, ProviderError
 
 PROVIDERS_AVAILABLE = {
-    "animeunity": ("aw_cli.providers.animeunity", "Animeunity"),
-    "animeworld": ("aw_cli.providers.animeworld", "Animeworld"),
-    # "animeworld-api": ("aw_cli.providers.animeworld_api", "AnimeWorldAPI"),
+    "animeunity": ("aw_web.providers.animeunity", "Animeunity"),
+    "animeworld": ("aw_web.providers.animeworld", "Animeworld"),
 }
 
 def create_provider(name: str) -> Provider:
@@ -32,5 +31,6 @@ def create_provider(name: str) -> Provider:
 
 __all__ = [
     "Provider",
+    "ProviderError",
     "create_provider",
 ]

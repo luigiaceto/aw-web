@@ -1,9 +1,9 @@
 from functools import lru_cache
 import re
 from html import unescape
-from urllib.parse import quote_plus
+from httpx import HTTPError
 from ..anime import Anime, AnimeStatus
-from .provider import Provider, HTTPError
+from .provider import Provider
 
 
 class Animeworld(Provider):

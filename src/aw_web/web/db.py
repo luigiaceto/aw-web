@@ -7,7 +7,7 @@ from typing import Any
 
 
 def default_db_path() -> Path:
-    path = Path.home() / ".aw-cli" / "web.sqlite3"
+    path = Path.home() / ".aw-web" / "web.sqlite3"
     path.parent.mkdir(parents=True, exist_ok=True)
     return path
 
@@ -95,7 +95,7 @@ class WebDatabase:
         banner_url: str = "",
         current_episode: str | None = None,
     ) -> None:
-        current = current_episode or str(anime_data.get("curr_ep") or "0")
+        current = current_episode if current_episode is not None else "0"
         with self.connect() as conn:
             conn.execute(
                 """

@@ -1,6 +1,6 @@
 ---
 name: Bug report
-about: Segnala un problema con aw-cli
+about: Segnala un problema con aw-web
 title: "[Bug]: "
 labels: bug
 assignees: ""
@@ -14,18 +14,18 @@ Descrivi chiaramente il problema riscontrato.
 
 Esempio:
 
-1. Esegui `aw-cli ...`
+1. Esegui `aw-web`
 2. Seleziona ...
 3. Il problema si verifica quando ...
 
 ## Informazioni sull'ambiente
 
-### Versione di aw-cli
+### Versione di aw-web
 
 Esegui:
 
 ```bash
-aw-cli -v
+aw-web
 ```
 
 Output:

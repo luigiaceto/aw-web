@@ -6,8 +6,8 @@ import sys
 from http.server import BaseHTTPRequestHandler
 from urllib.parse import parse_qs, urlparse
 
-from aw_cli.web.components import page
-from aw_cli.web.services import (
+from aw_web.web.components import page
+from aw_web.web.services import (
     DB,
     STREAMS,
     get_cover,
@@ -18,8 +18,8 @@ from aw_cli.web.services import (
     stream_context,
     stream_token,
 )
-from aw_cli.web.utils import anime_from_json, esc, provider_error, q
-from aw_cli.web.views import redirect, render_anime, render_home, render_search, render_watch
+from aw_web.web.utils import anime_from_json, esc, q
+from aw_web.web.views import redirect, render_anime, render_home, render_search, render_watch
 
 
 def handle_add_watchlist(fields: dict[str, list[str]]) -> bytes:
@@ -32,7 +32,7 @@ def handle_add_watchlist(fields: dict[str, list[str]]) -> bytes:
         anime_data=anime.to_dict(),
         cover_url=fields.get("cover_url", [""])[0],
         banner_url=fields.get("banner_url", [""])[0],
-        current_episode=str(existing["current_episode"]) if existing else None,
+        current_episode=str(existing["current_episode"]) if existing else "0",
     )
     return redirect(f"/anime?saved=1&provider={q(provider_name)}&ref={q(anime.ref)}")
 
@@ -52,15 +52,9 @@ def handle_play(fields: dict[str, list[str]]) -> bytes:
     provider = get_provider(provider_name)
 
     if not anime.has_episode(episode_num):
-        try:
-            provider.episodes(anime)
-        except SystemExit as exc:
-            raise RuntimeError(provider_error(exc)) from exc
+        provider.episodes(anime)
     episode = anime.episode(episode_num)
-    try:
-        url = provider.episode_link(anime, episode)
-    except SystemExit as exc:
-        raise RuntimeError(provider_error(exc)) from exc
+    url = provider.episode_link(anime, episode)
     open_external_player(url, str(episode))
     save_watch_progress(provider_name, anime, episode)
     return redirect(f"/anime?saved=1&provider={q(provider_name)}&ref={q(anime.ref)}")

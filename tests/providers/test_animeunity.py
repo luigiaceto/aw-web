@@ -2,8 +2,8 @@ import json
 import pytest
 from pathlib import Path
 from unittest.mock import patch, MagicMock
-from aw_cli.providers.animeunity import Animeunity
-from aw_cli.anime import Anime
+from aw_web.providers.animeunity import Animeunity
+from aw_web.anime import Anime
 
 FIXTURES_DIR = Path(__file__).parent.parent / "fixtures"
 

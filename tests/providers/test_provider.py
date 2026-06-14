@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import MagicMock
-from aw_cli.providers import create_provider, PROVIDERS_AVAILABLE
+from aw_web.providers import create_provider, PROVIDERS_AVAILABLE
 
 
 class TestProviderFactory:

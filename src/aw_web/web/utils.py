@@ -7,7 +7,7 @@ import json
 from typing import Any
 from urllib.parse import quote
 
-from aw_cli.anime import Anime
+from aw_web.anime import Anime
 
 
 def esc(value: object) -> str:
@@ -27,9 +27,8 @@ def anime_from_json(raw: str) -> Anime:
 
 
 def provider_error(exc: BaseException) -> str:
-    if isinstance(exc, SystemExit):
-        return "Il provider ha interrotto l'operazione. Riprova o cambia provider."
-    return str(exc)
+    message = str(exc).strip()
+    return message or exc.__class__.__name__
 
 
 def episode_value(value: str) -> float:

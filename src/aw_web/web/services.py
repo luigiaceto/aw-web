@@ -11,25 +11,19 @@ from uuid import uuid4
 
 import httpx
 
-from aw_cli import providers, utilities as ut
-from aw_cli.anime import Anime
-from aw_cli.web.state import DB, STREAMS
-from aw_cli.web.utils import anime_from_json, anime_to_json, provider_error
+from aw_web import providers, utilities as ut
+from aw_web.anime import Anime
+from aw_web.web.state import DB, STREAMS
+from aw_web.web.utils import anime_from_json, anime_to_json
 
 
 def ensure_config() -> None:
-    config_path = Path(__file__).parents[1] / "config.toml"
-    if config_path.exists():
-        ut.get_config()
-        return
-
     player_path = shutil.which("mpv") or shutil.which("vlc") or ""
     player_type = "vlc" if player_path and "vlc" in Path(player_path).name.lower() else "mpv"
     ut.config_data = {
         "general": {"specials": False},
         "provider": {"source": "animeunity"},
         "player": {"type": player_type, "path": player_path},
-        "style": ut.DEFAULT_STYLE.copy(),
     }
 
 
@@ -139,10 +133,7 @@ def stream_context(token: str) -> tuple[str, Anime, Anime.Episode]:
     episode_num = data["episode"]
     if not anime.has_episode(episode_num):
         provider = get_provider(provider_name)
-        try:
-            provider.episodes(anime)
-        except SystemExit as exc:
-            raise RuntimeError(provider_error(exc)) from exc
+        provider.episodes(anime)
         data["anime"] = anime_to_json(anime)
     return provider_name, anime, anime.episode(episode_num)
 
@@ -155,10 +146,7 @@ def resolve_episode_url(token: str) -> tuple[str, dict[str, str]]:
 
     provider_name, anime, episode = stream_context(token)
     provider = get_provider(provider_name)
-    try:
-        url = provider.episode_link(anime, episode)
-    except SystemExit as exc:
-        raise RuntimeError(provider_error(exc)) from exc
+    url = provider.episode_link(anime, episode)
     if data is not None:
         data["url"] = url
     return url, dict(provider.Client.headers)
@@ -169,7 +157,7 @@ def open_external_player(url: str, title: str) -> None:
     player_type = str(player.get("type") or "mpv")
     player_path = str(player.get("path") or shutil.which(player_type) or "")
     if not player_path:
-        raise RuntimeError("Nessun player trovato. Installa mpv/vlc o configura aw-cli -a.")
+        raise RuntimeError("Nessun player trovato. Installa mpv/vlc o usa il player browser.")
 
     if player_type == "vlc" or "vlc" in Path(player_path).name.lower():
         command = [player_path, url, "--meta-title", title, "--fullscreen"]
