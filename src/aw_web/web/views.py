@@ -7,8 +7,35 @@ from urllib.parse import unquote
 
 from aw_web import providers
 from aw_web.anime import Anime
-from aw_web.web.components import card, collection_toggle, episode_row, favorite_card, image_html, page, watch_card
-from aw_web.web.services import DB, default_provider_name, get_cover, get_provider, resolve_episode_url, set_current_provider, stream_context
+from aw_web.web.components import (
+    card,
+    collection_toggle,
+    csrf_input,
+    episode_row,
+    favorite_card,
+    image_html,
+    page,
+    provider_match_card,
+    seasonal_card,
+    watch_card,
+)
+from aw_web.web.services import (
+    DB,
+    adjacent_season,
+    best_seasonal_match,
+    current_season,
+    default_provider_name,
+    get_cover,
+    get_provider,
+    normalize_season,
+    resolve_episode_url,
+    seasonal_anime,
+    seasonal_by_id,
+    seasonal_label,
+    seasonal_open_url,
+    set_current_provider,
+    stream_context,
+)
 from aw_web.web.utils import anime_to_json, esc, provider_error, q
 
 
@@ -84,6 +111,91 @@ def render_search(params: dict[str, list[str]]) -> bytes:
     </section>
     """
     return page("Ricerca", body)
+
+
+def render_seasonal(params: dict[str, list[str]]) -> bytes:
+    default_year, default_season = current_season()
+    try:
+        year = int(params.get("year", [str(default_year)])[0] or default_year)
+    except ValueError:
+        year = default_year
+    season = normalize_season(params.get("season", [default_season])[0])
+
+    prev_year, prev_season = adjacent_season(year, season, -1)
+    next_year, next_season = adjacent_season(year, season, 1)
+    options = "".join(
+        f'<option value="{esc(value)}" {"selected" if value == season else ""}>{esc(seasonal_label(value))}</option>'
+        for value in ("WINTER", "SPRING", "SUMMER", "FALL")
+    )
+    try:
+        items = seasonal_anime(year, season)
+        grid = "".join(seasonal_card(item, year, season) for item in items)
+        if not grid:
+            grid = '<p class="muted">Nessun anime stagionale trovato.</p>'
+    except Exception as exc:
+        grid = f'<p class="error">Impossibile caricare gli anime stagionali: {esc(provider_error(exc))}</p>'
+
+    body = f"""
+    <section>
+      <div class="season-toolbar">
+        <div class="season-heading">
+          <p class="eyebrow">Anime stagionali</p>
+          <h1>{esc(seasonal_label(season))} {esc(year)}</h1>
+          <p class="muted">Scegli una stagione e apri gli anime nel provider attivo.</p>
+        </div>
+        <div class="season-picker">
+          <a class="button secondary season-arrow" href="/stagionali?year={q(prev_year)}&season={q(prev_season)}" aria-label="Stagione precedente">&#8592;</a>
+          <a class="button secondary season-arrow" href="/stagionali?year={q(next_year)}&season={q(next_season)}" aria-label="Stagione successiva">&#8594;</a>
+        </div>
+      </div>
+      <form class="season-controls" action="/stagionali" method="get">
+        <input type="number" name="year" min="1960" max="2100" value="{esc(year)}" aria-label="Anno">
+        <select name="season" aria-label="Stagione">{options}</select>
+        <button>Vai</button>
+      </form>
+      <div class="grid">{grid}</div>
+    </section>
+    """
+    return page(f"Stagionali - {seasonal_label(season)} {year}", body)
+
+
+def render_seasonal_open(params: dict[str, list[str]]) -> bytes:
+    default_year, default_season = current_season()
+    provider_name = default_provider_name()
+    try:
+        year = int(params.get("year", [str(default_year)])[0] or default_year)
+        anilist_id = int(params.get("anilist_id", ["0"])[0] or 0)
+    except ValueError:
+        return page("Stagionali", '<p class="error">Richiesta stagionale non valida.</p>')
+    season = normalize_season(params.get("season", [default_season])[0])
+    item = seasonal_by_id(year, season, anilist_id)
+    if not item:
+        return page("Stagionali", '<p class="error">Anime stagionale non trovato.</p>')
+
+    try:
+        match, candidates = best_seasonal_match(provider_name, item)
+    except Exception as exc:
+        return page("Stagionali", f'<p class="error">Errore ricerca provider: {esc(provider_error(exc))}</p>')
+
+    if match:
+        return redirect(seasonal_open_url(provider_name, match))
+
+    back_url = f"/stagionali?year={q(year)}&season={q(season)}"
+    candidates_html = "".join(provider_match_card(anime, provider_name) for anime in candidates)
+    if not candidates_html:
+        candidates_html = f'<p class="muted">Non ho trovato "{esc(item.title)}" su {esc(provider_name)}.</p>'
+
+    body = f"""
+    <section>
+      <div class="section-title">
+        <h2>Risultati possibili</h2>
+        <a class="button secondary" href="{back_url}">Torna agli stagionali</a>
+      </div>
+      <p class="muted">Non c'e un match abbastanza sicuro per {esc(item.title)}. Scegli manualmente un risultato.</p>
+      <div class="grid">{candidates_html}</div>
+    </section>
+    """
+    return page(f"Scegli risultato - {item.title}", body)
 
 
 def render_anime(params: dict[str, list[str]]) -> bytes:
@@ -190,6 +302,7 @@ def render_watch(params: dict[str, list[str]]) -> bytes:
         prev_ep = episode.prev().num
         prev_html = f"""
         <form action="/watch/start" method="post">
+          {csrf_input()}
           <input type="hidden" name="provider" value="{esc(provider_name)}">
           <input type="hidden" name="anime" value="{esc(anime_to_json(anime))}">
           <input type="hidden" name="episode" value="{esc(prev_ep)}">
@@ -201,6 +314,7 @@ def render_watch(params: dict[str, list[str]]) -> bytes:
         next_ep = episode.next().num
         next_html = f"""
         <form action="/watch/start" method="post">
+          {csrf_input()}
           <input type="hidden" name="provider" value="{esc(provider_name)}">
           <input type="hidden" name="anime" value="{esc(anime_to_json(anime))}">
           <input type="hidden" name="episode" value="{esc(next_ep)}">
@@ -217,6 +331,7 @@ def render_watch(params: dict[str, list[str]]) -> bytes:
       <div class="row-actions">
         <a class="button" href="{back_url}">Torna agli episodi</a>
         <form action="/play-token" method="post">
+          {csrf_input()}
           <input type="hidden" name="token" value="{esc(token)}">
           <button class="secondary">Apri in MPV/VLC</button>
         </form>

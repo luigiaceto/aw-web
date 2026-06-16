@@ -6,27 +6,28 @@ Interfaccia web locale per navigare e guardare anime senza pubblicità o pop-up.
 <img width="1469" height="920" alt="Screenshot 2026-06-14 alle 22 56 11" src="https://github.com/user-attachments/assets/474f568f-36bf-417a-9e16-871e59b66fe2" />
 
 
-`aw-web` avvia un sito locale su `http://127.0.0.1:8765` con ricerca anime, ultimi episodi, watchlist, copertine e player integrato nel browser o con MPV/VLC.
+`aw-web` avvia un sito locale su `http://127.0.0.1:8765` con ricerca anime, ultimi episodi, watchlist, preferiti, anime stagionali, copertine e player integrato nel browser o con MPV/VLC.
 
 ## Indice
 
 - [Installazione](#installazione)
 - [Avvio](#avvio)
 - [Utilizzo](#utilizzo)
-- [Watchlist e Database](#watchlist-e-database)
+- [Anime Stagionali](#anime-stagionali)
+- [Watchlist, Preferiti e Database](#watchlist-preferiti-e-database)
 - [Player Browser e MPV/VLC](#player-browser-e-mpvlc)
 - [Domande Frequenti](#domande-frequenti)
 - [Problemi Noti](#problemi-noti)
 
-## Installazione
+## Installazione su MacOS (unico OS supportato e testato attualmente)
 
 Sono richiesti:
 
 - [uv](https://github.com/astral-sh/uv)
 - Python 3.10+
-- MPV o VLC, consigliato come fallback esterno
+- MPV o VLC, come video player fallback esterno
 
-Su macOS puoi installare `uv` e `mpv` con:
+Su macOS puoi installare `uv` e `mpv` tramite `brew` con:
 
 ```bash
 brew install uv mpv
@@ -40,7 +41,7 @@ brew install uv vlc
 
 ### Installazione (Globale) Da GitHub
 
-Puoi installare `aw-web` direttamente da questa repository GitHub:
+Puoi installare `aw-web` direttamente da questa repository GitHub tramite `uv`:
 
 ```bash
 uv tool install --force git+https://github.com/luigiaceto/aw-web.git
@@ -50,7 +51,7 @@ Per aggiornare `aw-web` all'ultima versione della repository, ripetere il comand
 
 ## Avvio
 
-Avvia ad terminale il server locale con:
+Avvia da terminale il server locale con:
 
 ```bash
 aw-web
@@ -69,9 +70,11 @@ Per fermarla, torna nel terminale e premi `Ctrl+C`.
 Dalla home dell'app puoi:
 
 - vedere gli ultimi episodi usciti;
+- aprire la pagina degli anime stagionali;
 - cercare anime;
 - aprire la pagina dettaglio di un anime;
-- aggiungere o rimuovere anime dalla watchlist;
+- vedere la tua watchlist;
+- vedere i tuoi preferiti;
 - vedere a che episodio eri arrivato;
 - vedere il badge `Nuovo episodio` quando esiste un episodio successivo all'ultimo visto.
 
@@ -79,12 +82,27 @@ Nella pagina anime puoi:
 
 - leggere info e trama;
 - vedere la copertina recuperata da AniList;
+- aggiungere o rimuovere l'anime dalla watchlist con il pulsante segnalibro;
+- aggiungere o rimuovere l'anime dai preferiti con il pulsante cuore;
 - scegliere un episodio;
 - guardarlo nel browser o aprirlo in MPV/VLC.
 
-## Watchlist e Database
+## Anime Stagionali
 
-La watchlist viene salvata in un database SQLite dentro:
+Dal pulsante `Stagionali` nella barra in alto puoi accedere alla pagina dedicata agli anime stagionali per rimanere aggiornati.
+
+In questa pagina puoi:
+
+- scegliere anno e stagione;
+- usare le frecce per andare alla stagione precedente o successiva;
+- vedere copertina, generi, numero di episodi e `Voto AniList`;
+- cliccare un anime per cercarlo nel provider attivo e aprirlo nella normale pagina dettaglio di `aw-web`.
+
+Il provider usato è quello selezionato nella barra in alto, accanto alla ricerca.
+
+## Watchlist, Preferiti e Database
+
+Watchlist, preferiti e progresso vengono salvati in un database SQLite locale dentro:
 
 ```text
 ~/.aw-web/web.sqlite3
@@ -92,15 +110,18 @@ La watchlist viene salvata in un database SQLite dentro:
 
 Nel database vengono salvati:
 
-- anime in watchlist;
+- anime aggiunti esplicitamente alla watchlist;
+- anime aggiunti ai preferiti;
 - provider usato;
 - ultimo episodio visto;
 - copertine cacheate;
 - metadati necessari per riaprire gli anime.
 
+ATTENZIONE: in caso di cancellazione del database locale perderete i vostri progressi fatti su questa WebApp.
+
 ## Player Browser e MPV/VLC
 
-`aw-web` supporta due modalita di riproduzione.
+`aw-web` supporta due modalità di riproduzione.
 
 ### Browser
 
@@ -143,14 +164,6 @@ Se in futuro il pacchetto venisse pubblicato su PyPI come `aw-web`, allora si po
 
 ```bash
 uv tool install aw-web
-```
-
-### Quale comando espone il progetto?
-
-Questo progetto espone solo il comando web:
-
-```toml
-aw-web = "aw_web.web.app:main"
 ```
 
 ## Problemi Noti

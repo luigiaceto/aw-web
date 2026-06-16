@@ -7,8 +7,13 @@ from typing import Any
 
 from aw_web.anime import Anime
 from aw_web.web.services import default_provider_name, get_cover
+from aw_web.web.state import CSRF_TOKEN
 from aw_web.web.styles import CSS
 from aw_web.web.utils import anime_to_json, esc, has_new_episode, q
+
+
+def csrf_input() -> str:
+    return f'<input type="hidden" name="csrf_token" value="{esc(CSRF_TOKEN)}">'
 
 
 def page(title: str, body: str) -> bytes:
@@ -24,10 +29,13 @@ def page(title: str, body: str) -> bytes:
     </head>
     <body>
       <header class="topbar">
-        <a class="brand" href="/">aw-web</a>
+        <nav class="main-nav" aria-label="Navigazione principale">
+          <a class="brand" href="/">aw-web</a>
+          <a class="nav-link" href="/stagionali">Stagionali</a>
+        </nav>
         <form class="search" action="/search" method="get">
           <input type="search" name="q" placeholder="Cerca anime..." autocomplete="off" required>
-          <select name="provider" id="provider-select" onchange="fetch('/set-provider?name='+this.value)">
+          <select name="provider" id="provider-select" onchange="fetch('/set-provider', {{method: 'POST', headers: {{'Content-Type': 'application/x-www-form-urlencoded'}}, body: new URLSearchParams({{name: this.value, csrf_token: '{esc(CSRF_TOKEN)}'}})}})">
             <option value="animeunity" {'selected' if provider == 'animeunity' else ''}>AnimeUnity</option>
             <option value="animeworld" {'selected' if provider == 'animeworld' else ''}>AnimeWorld</option>
           </select>
@@ -72,9 +80,53 @@ def card(anime: Anime, provider_name: str, badge: str = "") -> str:
     """
 
 
+def seasonal_card(item: Any, year: int, season: str) -> str:
+    genres = ", ".join(item.genres)
+    meta = []
+    if genres:
+        meta.append(esc(genres))
+    if item.episodes:
+        meta.append(f"{esc(item.episodes)} ep.")
+    if item.average_score:
+        meta.append(f"Voto AniList {esc(item.average_score)}%")
+    href = (
+        f"/stagionali/apri?year={q(year)}&season={q(season)}"
+        f"&anilist_id={q(item.anilist_id)}"
+    )
+    return f"""
+    <a class="card seasonal-card" href="{href}">
+      {image_html(item.cover_url, item.title)}
+      <div class="card-body">
+        <span class="badge">Stagionale</span>
+        <h3>{esc(item.title)}</h3>
+        <p>{' &middot; '.join(meta) or 'Apri nel provider'}</p>
+      </div>
+    </a>
+    """
+
+
+def provider_match_card(anime: Anime, provider_name: str) -> str:
+    cover = get_cover(anime.anilist_id, anime.name, allow_title_lookup=False)
+    href = (
+        f"/anime?provider={q(provider_name)}&name={q(anime.name)}&ref={q(anime.ref)}"
+        f"&curr_ep={q(anime.curr_ep)}&last_ep={q(anime.last_ep)}&anilist_id={q(anime.anilist_id)}"
+    )
+    return f"""
+    <a class="card" href="{href}">
+      {image_html(cover["cover_url"], anime.name)}
+      <div class="card-body">
+        <span class="badge">{esc(provider_name)}</span>
+        <h3>{esc(anime.name)}</h3>
+        <p>Ep. {esc(anime.curr_ep or '0')} / {esc(anime.last_ep or '0')}</p>
+      </div>
+    </a>
+    """
+
+
 def quick_play_form(provider_name: str, anime: Anime, episode_num: str, label: str) -> str:
     return f"""
     <form action="/play" method="post">
+      {csrf_input()}
       <input type="hidden" name="provider" value="{esc(provider_name)}">
       <input type="hidden" name="anime" value="{esc(anime_to_json(anime))}">
       <input type="hidden" name="episode" value="{esc(episode_num)}">
@@ -86,6 +138,7 @@ def quick_play_form(provider_name: str, anime: Anime, episode_num: str, label: s
 def token_play_form(token: str, label: str) -> str:
     return f"""
     <form action="/play-token" method="post">
+      {csrf_input()}
       <input type="hidden" name="token" value="{esc(token)}">
       <button>{esc(label)}</button>
     </form>
@@ -95,6 +148,7 @@ def token_play_form(token: str, label: str) -> str:
 def browser_play_form(provider_name: str, anime: Anime, episode_num: str, label: str) -> str:
     return f"""
     <form action="/watch/start" method="post">
+      {csrf_input()}
       <input type="hidden" name="provider" value="{esc(provider_name)}">
       <input type="hidden" name="anime" value="{esc(anime_to_json(anime))}">
       <input type="hidden" name="episode" value="{esc(episode_num)}">
@@ -117,6 +171,7 @@ def collection_toggle(
     icon = _bookmark_icon(active) if kind == "watchlist" else _heart_icon(active)
     return f"""
     <form class="icon-toggle-form" action="{esc(action)}" method="post">
+      {csrf_input()}
       <input type="hidden" name="provider" value="{esc(provider_name)}">
       <input type="hidden" name="anime" value="{esc(anime_to_json(anime))}">
       <input type="hidden" name="cover_url" value="{esc(cover_url)}">
@@ -162,6 +217,7 @@ def favorite_card(item: dict[str, Any]) -> str:
         <h3><a href="{href}">{esc(item['name'])}</a></h3>
         <div class="row-actions">
           <form action="/favorites/remove" method="post">
+            {csrf_input()}
             <input type="hidden" name="id" value="{esc(item['id'])}">
             <button class="secondary danger">Rimuovi</button>
           </form>
@@ -189,12 +245,14 @@ def watch_card(item: dict[str, Any], latest: list[Anime]) -> str:
         <p>Sei arrivato all'episodio <strong>{esc(current_episode)}</strong> / {esc(item['last_episode'])}</p>
         <div class="row-actions">
           <form action="/watch/start" method="post">
+            {csrf_input()}
             <input type="hidden" name="provider" value="{esc(str(item['provider']))}">
             <input type="hidden" name="anime" value="{esc(anime_to_json(anime))}">
             <input type="hidden" name="episode" value="{esc(playable_episode)}">
             <button>{esc(play_label)}</button>
           </form>
           <form action="/watchlist/remove" method="post">
+            {csrf_input()}
             <input type="hidden" name="id" value="{esc(item['id'])}">
             <button class="secondary danger">Rimuovi</button>
           </form>
@@ -214,12 +272,14 @@ def episode_row(provider_name: str, anime: Anime, episode: Anime.Episode, curren
       </div>
       <div class="row-actions compact">
         <form action="/watch/start" method="post">
+          {csrf_input()}
           <input type="hidden" name="provider" value="{esc(provider_name)}">
           <input type="hidden" name="anime" value="{esc(anime_to_json(anime))}">
           <input type="hidden" name="episode" value="{esc(episode.num)}">
           <button>Browser</button>
         </form>
         <form action="/play" method="post">
+          {csrf_input()}
           <input type="hidden" name="provider" value="{esc(provider_name)}">
           <input type="hidden" name="anime" value="{esc(anime_to_json(anime))}">
           <input type="hidden" name="episode" value="{esc(episode.num)}">

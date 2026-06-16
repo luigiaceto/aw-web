@@ -7,7 +7,10 @@ body { margin: 0; background: radial-gradient(circle at top left, #25314a 0, #0b
 a { color: inherit; text-decoration: none; }
 main { width: min(1180px, calc(100% - 32px)); margin: 0 auto 64px; }
 .topbar { position: sticky; top: 0; z-index: 5; display: flex; gap: 18px; align-items: center; justify-content: space-between; padding: 16px max(16px, calc((100vw - 1180px) / 2)); background: rgba(11, 13, 18, .82); border-bottom: 1px solid var(--line); backdrop-filter: blur(16px); }
+.main-nav { display: flex; gap: 16px; align-items: center; flex-shrink: 0; }
 .brand { font-weight: 900; letter-spacing: -.03em; font-size: 1.35rem; }
+.nav-link { padding: 9px 11px; border: 1px solid var(--line); border-radius: 12px; background: rgba(20, 24, 35, .72); color: var(--text); font-weight: 800; }
+.nav-link:hover { border-color: rgba(143, 209, 79, .55); }
 .search { display: flex; gap: 8px; flex: 1; max-width: 680px; }
 input, select, button, .button { border: 1px solid var(--line); border-radius: 12px; padding: 11px 13px; background: var(--panel); color: var(--text); font: inherit; }
 input[type="search"] { flex: 1; min-width: 0; }
@@ -37,11 +40,18 @@ section { margin-top: 34px; }
 .card-body { padding: 13px; }
 .card h3 { margin: 7px 0 6px; font-size: 1rem; line-height: 1.15; }
 .card p { margin: 0; color: var(--muted); font-size: .92rem; }
+.seasonal-card .cover { aspect-ratio: 5 / 7; }
 .saved-card { display: flex; grid-column: span 2; align-items: stretch; }
 .saved-card > a { display: block; flex-shrink: 0; }
 .saved-card .cover { width: 120px; min-width: 120px; height: 100%; aspect-ratio: unset; }
 .row-actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-top: 14px; }
 .row-actions.compact { margin-top: 0; justify-content: flex-end; }
+.season-toolbar { display: flex; justify-content: space-between; gap: 14px; align-items: center; margin: 28px 0 18px; }
+.season-picker { display: flex; gap: 10px; align-items: center; }
+.season-heading h1 { margin: 0 0 5px; font-size: clamp(2rem, 5vw, 3.35rem); line-height: 1; letter-spacing: -.04em; }
+.season-heading p { margin: 0; }
+.season-arrow { width: 46px; height: 46px; display: inline-grid; place-items: center; padding: 0; font-size: 1.45rem; }
+.season-controls { display: flex; gap: 10px; align-items: center; margin-bottom: 18px; }
 .detail { display: grid; grid-template-columns: minmax(180px, 290px) 1fr; gap: 28px; align-items: start; }
 .poster-wrap { border-radius: 24px; overflow: hidden; border: 1px solid var(--line); background: var(--panel); }
 .detail h1 { margin: 4px 0 10px; font-size: clamp(2rem, 5vw, 4rem); line-height: 1; letter-spacing: -.06em; }
@@ -62,5 +72,5 @@ section { margin-top: 34px; }
 .mode-proxy { color: #ffd166; }
 .mode-error { color: #ff6b6b; }
 .error { color: #ffd0d0; background: rgba(255, 107, 107, .12); border: 1px solid rgba(255, 107, 107, .4); padding: 14px; border-radius: 14px; }
-@media (max-width: 720px) { .topbar { align-items: stretch; flex-direction: column; } .search { max-width: none; } .search select { display: none; } .detail { grid-template-columns: 1fr; } .poster-wrap { max-width: 240px; } .saved-card { grid-column: auto; display: block; } .saved-card .cover { width: 100%; height: auto; } .episode { align-items: stretch; flex-direction: column; } .row-actions.compact { justify-content: flex-start; } }
+@media (max-width: 720px) { .topbar { align-items: stretch; flex-direction: column; } .main-nav { justify-content: space-between; } .search { max-width: none; } .search select { display: none; } .detail { grid-template-columns: 1fr; } .poster-wrap { max-width: 240px; } .saved-card { grid-column: auto; display: block; } .saved-card .cover { width: 100%; height: auto; } .episode { align-items: stretch; flex-direction: column; } .row-actions.compact { justify-content: flex-start; } .season-toolbar { align-items: stretch; flex-direction: column; } .season-picker, .season-controls { justify-content: space-between; } .season-controls select, .season-controls input { min-width: 0; width: 100%; } }
 """

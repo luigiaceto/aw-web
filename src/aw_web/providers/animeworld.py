@@ -2,6 +2,7 @@ from functools import lru_cache
 import re
 from html import unescape
 from httpx import HTTPError
+from urllib.parse import urlparse
 from ..anime import Anime, AnimeStatus
 from .provider import Provider
 
@@ -27,7 +28,7 @@ class Animeworld(Provider):
         Ottiene l'html della pagina web `url`.
         Gestisce cookie JavaScript (document.cookie) e imposta il csrf-token se presente.
         """
-        if not re.match(r"^https?://", url):
+        if not self._is_animeworld_url(url):
             raise HTTPError("Errore 404: pagina non trovata")
 
         response = self.Client.get(url)
@@ -54,6 +55,11 @@ class Animeworld(Provider):
             raise HTTPError("Errore 404: pagina non trovata")
 
         return response.text
+
+    def _is_animeworld_url(self, url: str) -> bool:
+        parsed = urlparse(url)
+        base = urlparse(self.BASE_URL)
+        return parsed.scheme in {"http", "https"} and parsed.netloc == base.netloc
 
     def _search(self, input: str) -> list[Anime]:
         # Assicuriamoci che il client abbia cookies/csrf-token caricando prima la homepage

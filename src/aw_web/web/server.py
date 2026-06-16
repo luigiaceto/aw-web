@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sys
 from http.server import BaseHTTPRequestHandler
+from secrets import compare_digest
 from urllib.parse import parse_qs, urlparse
 
 from aw_web.anime import Anime
@@ -20,8 +21,21 @@ from aw_web.web.services import (
     stream_context,
     stream_token,
 )
+from aw_web.web.state import CSRF_TOKEN, HOST, PORT
 from aw_web.web.utils import anime_from_json, esc, q
-from aw_web.web.views import redirect, render_anime, render_home, render_search, render_watch
+from aw_web.web.views import (
+    redirect,
+    render_anime,
+    render_home,
+    render_search,
+    render_seasonal,
+    render_seasonal_open,
+    render_watch,
+)
+
+
+MAX_POST_BYTES = 1024 * 1024
+ALLOWED_ORIGINS = {f"http://{HOST}:{PORT}", f"http://localhost:{PORT}"}
 
 
 def handle_add_watchlist(fields: dict[str, list[str]]) -> bytes:
@@ -140,25 +154,41 @@ class WebHandler(BaseHTTPRequestHandler):
             self.respond(render_search(params))
         elif parsed.path == "/anime":
             self.respond(render_anime(params))
+        elif parsed.path == "/stagionali":
+            self.respond(render_seasonal(params))
+        elif parsed.path == "/stagionali/apri":
+            self.respond(render_seasonal_open(params))
         elif parsed.path == "/watch":
             self.respond(render_watch(params))
         elif parsed.path == "/stream":
             self.stream_video(params)
         elif parsed.path == "/set-provider":
-            name = params.get("name", [""])[0]
-            set_current_provider(name)
-            self.send_response(204)
-            self.end_headers()
+            self.send_error(405)
         else:
             self.send_error(404)
 
     def do_POST(self) -> None:
-        length = int(self.headers.get("Content-Length", "0") or 0)
+        try:
+            length = int(self.headers.get("Content-Length", "0") or 0)
+        except ValueError:
+            self.send_error(400)
+            return
+        if length > MAX_POST_BYTES:
+            self.send_error(413)
+            return
         raw = self.rfile.read(length).decode("utf-8")
         fields = parse_qs(raw)
         parsed = urlparse(self.path)
+        if not self.same_origin() or not self.valid_csrf(fields):
+            self.send_error(403)
+            return
         try:
-            if parsed.path == "/watchlist/add":
+            if parsed.path == "/set-provider":
+                set_current_provider(fields.get("name", [""])[0])
+                self.send_response(204)
+                self.end_headers()
+                return
+            elif parsed.path == "/watchlist/add":
                 payload = handle_add_watchlist(fields)
             elif parsed.path == "/watchlist/toggle":
                 payload = handle_toggle_watchlist(fields)
@@ -180,6 +210,16 @@ class WebHandler(BaseHTTPRequestHandler):
             self.respond(payload)
         except Exception as exc:
             self.respond(page("Errore", f'<p class="error">{esc(exc)}</p><p><a href="/">Torna alla home</a></p>'), status=500)
+
+    def same_origin(self) -> bool:
+        origin = self.headers.get("Origin")
+        if not origin:
+            return True
+        return origin in ALLOWED_ORIGINS
+
+    def valid_csrf(self, fields: dict[str, list[str]]) -> bool:
+        token = fields.get("csrf_token", [""])[0]
+        return compare_digest(token, CSRF_TOKEN)
 
     def stream_video(self, params: dict[str, list[str]]) -> None:
         token = params.get("token", [""])[0]
