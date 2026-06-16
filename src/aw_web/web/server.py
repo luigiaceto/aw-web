@@ -15,6 +15,7 @@ from aw_web.web.services import (
     open_external_player,
     resolve_episode_url,
     save_watch_progress,
+    set_current_provider,
     stream_context,
     stream_token,
 )
@@ -102,6 +103,11 @@ class WebHandler(BaseHTTPRequestHandler):
             self.respond(render_watch(params))
         elif parsed.path == "/stream":
             self.stream_video(params)
+        elif parsed.path == "/set-provider":
+            name = params.get("name", [""])[0]
+            set_current_provider(name)
+            self.send_response(204)
+            self.end_headers()
         else:
             self.send_error(404)
 

@@ -27,7 +27,7 @@ def page(title: str, body: str) -> bytes:
         <a class="brand" href="/">aw-web</a>
         <form class="search" action="/search" method="get">
           <input type="search" name="q" placeholder="Cerca anime..." autocomplete="off" required>
-          <select name="provider">
+          <select name="provider" id="provider-select" onchange="fetch('/set-provider?name='+this.value)">
             <option value="animeunity" {'selected' if provider == 'animeunity' else ''}>AnimeUnity</option>
             <option value="animeworld" {'selected' if provider == 'animeworld' else ''}>AnimeWorld</option>
           </select>
@@ -120,8 +120,12 @@ def watch_card(item: dict[str, Any], latest: list[Anime]) -> str:
         <h3><a href="{href}">{esc(item['name'])}</a></h3>
         <p>Sei arrivato all'episodio <strong>{esc(current_episode)}</strong> / {esc(item['last_episode'])}</p>
         <div class="row-actions">
-          {quick_play_form(str(item['provider']), anime, playable_episode, play_label)}
-          {browser_play_form(str(item['provider']), anime, playable_episode, 'Browser')}
+          <form action="/watch/start" method="post">
+            <input type="hidden" name="provider" value="{esc(str(item['provider']))}">
+            <input type="hidden" name="anime" value="{esc(anime_to_json(anime))}">
+            <input type="hidden" name="episode" value="{esc(playable_episode)}">
+            <button>{esc(play_label)}</button>
+          </form>
           <form action="/watchlist/remove" method="post">
             <input type="hidden" name="id" value="{esc(item['id'])}">
             <button class="secondary danger">Rimuovi</button>
@@ -141,8 +145,18 @@ def episode_row(provider_name: str, anime: Anime, episode: Anime.Episode, curren
         {('<span class="badge">ultimo visto</span>' if active else '')}
       </div>
       <div class="row-actions compact">
-        {browser_play_form(provider_name, anime, episode.num, 'Browser')}
-        {quick_play_form(provider_name, anime, episode.num, 'MPV/VLC')}
+        <form action="/watch/start" method="post">
+          <input type="hidden" name="provider" value="{esc(provider_name)}">
+          <input type="hidden" name="anime" value="{esc(anime_to_json(anime))}">
+          <input type="hidden" name="episode" value="{esc(episode.num)}">
+          <button>Browser</button>
+        </form>
+        <form action="/play" method="post">
+          <input type="hidden" name="provider" value="{esc(provider_name)}">
+          <input type="hidden" name="anime" value="{esc(anime_to_json(anime))}">
+          <input type="hidden" name="episode" value="{esc(episode.num)}">
+          <button class="secondary">MPV/VLC</button>
+        </form>
       </div>
     </div>
     """

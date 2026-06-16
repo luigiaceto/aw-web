@@ -13,6 +13,7 @@ import httpx
 
 from aw_web import providers, utilities as ut
 from aw_web.anime import Anime
+from aw_web.web import state as _state
 from aw_web.web.state import DB, STREAMS
 from aw_web.web.utils import anime_from_json, anime_to_json
 
@@ -33,7 +34,15 @@ def get_provider(name: str) -> providers.Provider:
 
 
 def default_provider_name() -> str:
+    if _state.CURRENT_PROVIDER:
+        return _state.CURRENT_PROVIDER
     return str(ut.config_data.get("provider", {}).get("source", "animeunity"))
+
+
+def set_current_provider(name: str) -> None:
+    """Persist the active provider for the current session."""
+    if name in providers.PROVIDERS_AVAILABLE:
+        _state.CURRENT_PROVIDER = name
 
 
 def cover_cache_key(anilist_id: int, title: str) -> str:

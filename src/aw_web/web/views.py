@@ -8,7 +8,7 @@ from urllib.parse import unquote
 from aw_web import providers
 from aw_web.anime import Anime
 from aw_web.web.components import card, episode_row, image_html, page, token_play_form, watch_card
-from aw_web.web.services import DB, default_provider_name, get_cover, get_provider, resolve_episode_url, stream_context
+from aw_web.web.services import DB, default_provider_name, get_cover, get_provider, resolve_episode_url, set_current_provider, stream_context
 from aw_web.web.utils import anime_to_json, esc, provider_error, q
 
 
@@ -56,6 +56,7 @@ def render_search(params: dict[str, list[str]]) -> bytes:
     provider_name = params.get("provider", [default_provider_name()])[0]
     if provider_name not in providers.PROVIDERS_AVAILABLE:
         provider_name = default_provider_name()
+    set_current_provider(provider_name)
     if not term:
         return redirect("/")
 
@@ -153,7 +154,7 @@ def render_anime(params: dict[str, list[str]]) -> bytes:
       </div>
     </section>
     <section>
-      <div class="section-title"><h2>Episodi</h2><span>MPV/VLC esterno</span></div>
+      <div class="section-title"><h2>Episodi</h2></div>
       <div class="episodes">{episodes_html}</div>
     </section>
     """
@@ -176,17 +177,46 @@ def render_watch(params: dict[str, list[str]]) -> bytes:
         direct_url, _ = resolve_episode_url(token)
     except Exception as exc:
         direct_error = provider_error(exc)
+
+    prev_html = ""
+    if episode.has_prev():
+        prev_ep = episode.prev().num
+        prev_html = f"""
+        <form action="/watch/start" method="post">
+          <input type="hidden" name="provider" value="{esc(provider_name)}">
+          <input type="hidden" name="anime" value="{esc(anime_to_json(anime))}">
+          <input type="hidden" name="episode" value="{esc(prev_ep)}">
+          <button class="secondary">&#8592; Ep. {esc(prev_ep)}</button>
+        </form>"""
+
+    next_html = ""
+    if episode.has_next():
+        next_ep = episode.next().num
+        next_html = f"""
+        <form action="/watch/start" method="post">
+          <input type="hidden" name="provider" value="{esc(provider_name)}">
+          <input type="hidden" name="anime" value="{esc(anime_to_json(anime))}">
+          <input type="hidden" name="episode" value="{esc(next_ep)}">
+          <button class="secondary">Ep. {esc(next_ep)} &#8594;</button>
+        </form>"""
+
     body = f"""
     <section class="watch-page">
-      <div class="section-title"><h2>{esc(anime.name)} - Ep. {esc(episode.num)}</h2><span>Player browser</span></div>
+      <div class="section-title"><h2>{esc(anime.name)} - Ep. {esc(episode.num)}</h2><div id="playback-mode" class="mode-pill mode-direct"><span></span>Diretto</div></div>
       {f'<p class="error">{esc(direct_error)}</p>' if direct_error else ''}
       <div class="video-shell">
-        <div id="playback-mode" class="mode-pill mode-direct"><span></span>Diretto</div>
         <video id="player" class="video-player" controls autoplay playsinline preload="metadata"></video>
       </div>
       <div class="row-actions">
-        {token_play_form(token, 'Apri in MPV/VLC')}
-        <a class="button secondary" href="{back_url}">Torna agli episodi</a>
+        <a class="button" href="{back_url}">Torna agli episodi</a>
+        <form action="/play-token" method="post">
+          <input type="hidden" name="token" value="{esc(token)}">
+          <button class="secondary">Apri in MPV/VLC</button>
+        </form>
+        <div class="nav-group">
+          {prev_html}
+          {next_html}
+        </div>
       </div>
       <p id="player-status" class="muted">Avvio in modalita browser diretta. Se non funziona, passo automaticamente al proxy locale.</p>
     </section>

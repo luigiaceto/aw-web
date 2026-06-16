@@ -32,8 +32,9 @@ section { margin-top: 34px; }
 .card-body { padding: 13px; }
 .card h3 { margin: 7px 0 6px; font-size: 1rem; line-height: 1.15; }
 .card p { margin: 0; color: var(--muted); font-size: .92rem; }
-.saved-card { display: flex; grid-column: span 2; }
-.saved-card .cover { width: 120px; min-width: 120px; height: 180px; }
+.saved-card { display: flex; grid-column: span 2; align-items: stretch; }
+.saved-card > a { display: block; flex-shrink: 0; }
+.saved-card .cover { width: 120px; min-width: 120px; height: 100%; aspect-ratio: unset; }
 .row-actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-top: 14px; }
 .row-actions.compact { margin-top: 0; justify-content: flex-end; }
 .detail { display: grid; grid-template-columns: minmax(180px, 290px) 1fr; gap: 28px; align-items: start; }
@@ -46,9 +47,10 @@ section { margin-top: 34px; }
 .episode { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 16px; background: rgba(20, 24, 35, .88); }
 .episode.active { border-color: rgba(143, 209, 79, .75); background: rgba(143, 209, 79, .1); }
 .watch-page { max-width: 1120px; margin-inline: auto; }
+.nav-group { display: flex; gap: 10px; margin-left: auto; align-items: center; }
 .video-shell { position: relative; }
 .video-player { width: 100%; max-height: 72vh; background: #000; border: 1px solid var(--line); border-radius: 24px; box-shadow: 0 24px 80px rgba(0,0,0,.45); }
-.mode-pill { position: absolute; top: 14px; right: 14px; z-index: 2; display: inline-flex; align-items: center; gap: 8px; padding: 8px 11px; border: 1px solid currentColor; border-radius: 999px; background: rgba(8, 10, 14, .78); font-size: .82rem; font-weight: 900; backdrop-filter: blur(12px); box-shadow: 0 10px 30px rgba(0,0,0,.32); }
+.mode-pill { display: inline-flex; align-items: center; gap: 8px; padding: 8px 11px; border: 1px solid currentColor; border-radius: 999px; background: rgba(8, 10, 14, .78); font-size: .82rem; font-weight: 900; backdrop-filter: blur(12px); box-shadow: 0 10px 30px rgba(0,0,0,.32); white-space: nowrap; }
 .mode-pill span { width: 9px; height: 9px; border-radius: 50%; background: currentColor; box-shadow: 0 0 18px currentColor; }
 .mode-direct { color: #8fd14f; }
 .mode-buffering { color: #7cc7ff; }

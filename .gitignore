@@ -91,6 +91,7 @@ aw-cronologia.csv
 *.sqlite
 *.sqlite3
 *.db
+TODO.md
 
 # Fixtures for tests
 tests/fixtures/

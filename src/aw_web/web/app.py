@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import os
+import signal
+import sys
 import webbrowser
 from http.server import ThreadingHTTPServer
 
@@ -16,11 +19,23 @@ def main() -> None:
     url = f"http://{HOST}:{PORT}"
     print(f"aw-web avviato su {url}")
     print(f"Database watchlist: {DB.path}")
+
+    def _sigterm(signum: int, frame: object) -> None:
+        print("\nWebapp chiusa, a presto!")
+        os._exit(0)
+
+    signal.signal(signal.SIGTERM, _sigterm)
+
     try:
         webbrowser.open(url)
     except Exception:
         pass
-    server.serve_forever()
+
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        print("\nWebapp chiusa, a presto!")
+        sys.exit(0)
 
 
 if __name__ == "__main__":
