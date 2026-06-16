@@ -2,20 +2,20 @@
 
 Interfaccia web locale per navigare e guardare anime senza pubblicità o pop-up.
 
+<img width="1470" height="877" alt="Screenshot 2026-06-16 alle 22 44 26" src="https://github.com/user-attachments/assets/8b0e6ec5-3dc2-42ab-8b3d-f1cef255a7c9" />
 
-<img width="1469" height="920" alt="Screenshot 2026-06-14 alle 22 56 11" src="https://github.com/user-attachments/assets/474f568f-36bf-417a-9e16-871e59b66fe2" />
+<img width="1470" height="877" alt="Screenshot 2026-06-16 alle 22 43 53" src="https://github.com/user-attachments/assets/254eb4e0-bc87-42bb-b0ad-25f833ad1f04" />
 
-
-`aw-web` avvia un sito locale su `http://127.0.0.1:8765` con ricerca anime, ultimi episodi, watchlist, preferiti, anime stagionali, copertine e player integrato nel browser o con MPV/VLC.
+`aw-web` avvia un sito web locale su `http://127.0.0.1:8765` con ricerca anime, ultimi episodi, watchlist, preferiti, anime stagionali, copertine e player integrato nel browser o con MPV/VLC.
 
 ## Indice
 
-- [Installazione](#installazione)
+- [Installazione](#installazione-su-macos-unico-os-supportato-e-testato-attualmente)
 - [Avvio](#avvio)
 - [Utilizzo](#utilizzo)
 - [Anime Stagionali](#anime-stagionali)
 - [Watchlist, Preferiti e Database](#watchlist-preferiti-e-database)
-- [Player Browser e MPV/VLC](#player-browser-e-mpvlc)
+- [Player Browser e MPV/VLC](#player-browser-e-mpvvlc)
 - [Domande Frequenti](#domande-frequenti)
 - [Problemi Noti](#problemi-noti)
 
@@ -57,7 +57,7 @@ Avvia da terminale il server locale con:
 aw-web
 ```
 
-L'app verra aperta nel browser su:
+L'app verrà aperta nel browser su:
 
 ```text
 http://127.0.0.1:8765
@@ -125,7 +125,7 @@ ATTENZIONE: in caso di cancellazione del database locale perderete i vostri prog
 
 ### Browser
 
-Il player browser prova prima la modalita diretta:
+Il player browser prova prima la modalità diretta:
 
 ```text
 server video -> browser
