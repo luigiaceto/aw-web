@@ -174,8 +174,6 @@ def render_watch(params: dict[str, list[str]]) -> bytes:
     except Exception as exc:
         return page("Player", f'<p class="error">{esc(exc)}</p><p><a href="/">Torna alla home</a></p>')
 
-    progress = DB.get_episode_progress(provider_name, anime.ref, episode.num) or {}
-    resume_at = int(progress.get("progress_seconds") or 0)
     back_url = (
         f"/anime?provider={q(provider_name)}&name={q(anime.name)}&ref={q(anime.ref)}"
         f"&curr_ep={q(anime.curr_ep)}&last_ep={q(anime.last_ep)}&anilist_id={q(anime.anilist_id)}"
@@ -233,11 +231,9 @@ def render_watch(params: dict[str, list[str]]) -> bytes:
       const video = document.getElementById('player');
       const status = document.getElementById('player-status');
       const mode = document.getElementById('playback-mode');
-      const resumeAt = {resume_at};
       const directUrl = {json.dumps(direct_url)};
       const proxyUrl = '/stream?token={esc(token)}';
       let restored = false;
-      let lastSavedAt = -1;
       let usingProxy = false;
       let pendingResumeAt = 0;
       function setMode(kind, label) {{
@@ -245,23 +241,11 @@ def render_watch(params: dict[str, list[str]]) -> bytes:
         mode.className = 'mode-pill mode-' + kind;
         mode.innerHTML = '<span></span>' + label;
       }}
-      function saveProgress(completed = false) {{
-        if (!video || Number.isNaN(video.currentTime)) return;
-        const currentSecond = Math.floor(video.currentTime || 0);
-        if (!completed && currentSecond === lastSavedAt) return;
-        lastSavedAt = currentSecond;
-        const body = new URLSearchParams({{
-          token: {json.dumps(token)},
-          seconds: String(currentSecond),
-          completed: completed ? '1' : '0'
-        }});
-        fetch('/progress', {{ method: 'POST', body, keepalive: true }}).catch(() => {{}});
-      }}
       function useProxy() {{
         if (usingProxy) return;
         usingProxy = true;
         restored = false;
-        pendingResumeAt = Math.max(video.currentTime || 0, resumeAt || 0);
+        pendingResumeAt = video.currentTime || 0;
         setMode('proxy', 'Proxy fallback');
         if (status) status.textContent = 'Link diretto non riproducibile dal browser: uso il proxy locale aw-web.';
         video.src = proxyUrl;
@@ -269,7 +253,7 @@ def render_watch(params: dict[str, list[str]]) -> bytes:
         video.play().catch(() => {{}});
       }}
       video.addEventListener('loadedmetadata', () => {{
-        const target = pendingResumeAt || resumeAt;
+        const target = pendingResumeAt;
         if (!restored && target > 5 && target < video.duration - 10) {{
           video.currentTime = target;
         }}
@@ -280,9 +264,6 @@ def render_watch(params: dict[str, list[str]]) -> bytes:
       }});
       video.addEventListener('waiting', () => {{
         setMode('buffering', usingProxy ? 'Buffering proxy' : 'Buffering');
-      }});
-      video.addEventListener('timeupdate', () => {{
-        if (Math.floor(video.currentTime) % 30 === 0) saveProgress(false);
       }});
       video.addEventListener('error', () => {{
         if (usingProxy) {{
@@ -295,9 +276,6 @@ def render_watch(params: dict[str, list[str]]) -> bytes:
       video.addEventListener('stalled', () => {{
         setMode('buffering', usingProxy ? 'Buffering proxy' : 'Buffering');
       }});
-      video.addEventListener('pause', () => saveProgress(false));
-      video.addEventListener('ended', () => saveProgress(true));
-      window.addEventListener('beforeunload', () => saveProgress(false));
       if (directUrl) {{
         setMode('direct', 'Diretto');
         video.src = directUrl;

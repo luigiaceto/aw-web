@@ -95,7 +95,6 @@ Nel database vengono salvati:
 - anime in watchlist;
 - provider usato;
 - ultimo episodio visto;
-- progresso dell'episodio nel player browser;
 - copertine cacheate;
 - metadati necessari per riaprire gli anime.
 

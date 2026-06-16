@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
+
+COVER_CACHE_TTL_DAYS = 30
 
 
 def default_db_path() -> Path:
@@ -96,17 +99,8 @@ class WebDatabase:
                 """
             )
             conn.execute(
-                """
-                CREATE TABLE IF NOT EXISTS episode_progress (
-                    provider TEXT NOT NULL,
-                    anime_ref TEXT NOT NULL,
-                    episode_num TEXT NOT NULL,
-                    progress_seconds INTEGER NOT NULL DEFAULT 0,
-                    completed INTEGER NOT NULL DEFAULT 0,
-                    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    PRIMARY KEY(provider, anime_ref, episode_num)
-                )
-                """
+                "DELETE FROM cover_cache WHERE updated_at < ?",
+                (self._cover_cache_cutoff(),),
             )
 
     def _collection(self, table: str) -> list[dict[str, Any]]:
@@ -296,7 +290,30 @@ class WebDatabase:
             row = conn.execute(
                 "SELECT * FROM cover_cache WHERE cache_key = ?", (cache_key,)
             ).fetchone()
+            if row and self._is_cover_cache_expired(str(row["updated_at"])):
+                conn.execute("DELETE FROM cover_cache WHERE cache_key = ?", (cache_key,))
+                return None
             return dict(row) if row else None
+
+    def prune_cover_cache(self) -> None:
+        with self.connect() as conn:
+            conn.execute(
+                "DELETE FROM cover_cache WHERE updated_at < ?",
+                (self._cover_cache_cutoff(),),
+            )
+
+    def _cover_cache_cutoff(self) -> str:
+        cutoff = datetime.now(timezone.utc) - timedelta(days=COVER_CACHE_TTL_DAYS)
+        return cutoff.strftime("%Y-%m-%d %H:%M:%S")
+
+    def _is_cover_cache_expired(self, updated_at: str) -> bool:
+        try:
+            cached_at = datetime.fromisoformat(updated_at.replace("Z", "+00:00"))
+        except ValueError:
+            return True
+        if cached_at.tzinfo is None:
+            cached_at = cached_at.replace(tzinfo=timezone.utc)
+        return datetime.now(timezone.utc) - cached_at > timedelta(days=COVER_CACHE_TTL_DAYS)
 
     def set_cover(
         self,
@@ -323,39 +340,4 @@ class WebDatabase:
                     updated_at = CURRENT_TIMESTAMP
                 """,
                 (cache_key, anilist_id, title, cover_url, banner_url, color),
-            )
-
-    def get_episode_progress(
-        self, provider: str, anime_ref: str, episode_num: str
-    ) -> dict[str, Any] | None:
-        with self.connect() as conn:
-            row = conn.execute(
-                """
-                SELECT * FROM episode_progress
-                WHERE provider = ? AND anime_ref = ? AND episode_num = ?
-                """,
-                (provider, anime_ref, episode_num),
-            ).fetchone()
-            return dict(row) if row else None
-
-    def set_episode_progress(
-        self,
-        provider: str,
-        anime_ref: str,
-        episode_num: str,
-        progress_seconds: int,
-        completed: bool = False,
-    ) -> None:
-        with self.connect() as conn:
-            conn.execute(
-                """
-                INSERT INTO episode_progress (
-                    provider, anime_ref, episode_num, progress_seconds, completed
-                ) VALUES (?, ?, ?, ?, ?)
-                ON CONFLICT(provider, anime_ref, episode_num) DO UPDATE SET
-                    progress_seconds = excluded.progress_seconds,
-                    completed = excluded.completed,
-                    updated_at = CURRENT_TIMESTAMP
-                """,
-                (provider, anime_ref, episode_num, progress_seconds, int(completed)),
             )

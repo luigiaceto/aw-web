@@ -130,16 +130,6 @@ def handle_watch_start(fields: dict[str, list[str]]) -> bytes:
     return redirect(f"/watch?token={q(token)}")
 
 
-def handle_progress(fields: dict[str, list[str]]) -> bytes:
-    token = fields.get("token", [""])[0]
-    seconds = int(float(fields.get("seconds", ["0"])[0] or 0))
-    completed = fields.get("completed", ["0"])[0] == "1"
-    provider_name, anime, episode = stream_context(token)
-    DB.set_episode_progress(provider_name, anime.ref, episode.num, 0 if completed else seconds, completed)
-    save_watch_progress(provider_name, anime, episode)
-    return b"OK"
-
-
 class WebHandler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:
         parsed = urlparse(self.path)
@@ -184,16 +174,10 @@ class WebHandler(BaseHTTPRequestHandler):
                 payload = handle_play_token(fields)
             elif parsed.path == "/watch/start":
                 payload = handle_watch_start(fields)
-            elif parsed.path == "/progress":
-                payload = handle_progress(fields)
             else:
                 self.send_error(404)
                 return
-            if parsed.path == "/progress":
-                self.send_response(204)
-                self.end_headers()
-            else:
-                self.respond(payload)
+            self.respond(payload)
         except Exception as exc:
             self.respond(page("Errore", f'<p class="error">{esc(exc)}</p><p><a href="/">Torna alla home</a></p>'), status=500)
 
