@@ -9,7 +9,7 @@ from aw_web.anime import Anime
 from aw_web.web.services import default_provider_name, get_cover
 from aw_web.web.state import CSRF_TOKEN
 from aw_web.web.styles import CSS
-from aw_web.web.utils import anime_to_json, esc, has_new_episode, q
+from aw_web.web.utils import anime_to_json, available_last_episode, esc, has_new_episode, q
 
 
 def csrf_input() -> str:
@@ -234,6 +234,7 @@ def watch_card(item: dict[str, Any], latest: list[Anime]) -> str:
     href = f"/anime?saved=1&provider={q(item['provider'])}&name={q(item['name'])}&ref={q(item['ref'])}"
     new_episode_badge = '<span class="badge new-episode">Nuovo episodio</span>' if has_new_episode(item, latest) else ""
     current_episode = str(item["current_episode"])
+    last_episode = available_last_episode(item, latest)
     playable_episode = current_episode if current_episode != "0" else next(iter(anime.episodes()), current_episode)
     play_label = "Inizia" if current_episode == "0" else "Riprendi"
     return f"""
@@ -242,7 +243,7 @@ def watch_card(item: dict[str, Any], latest: list[Anime]) -> str:
       <div class="card-body">
         <span class="badge">Watchlist</span>{new_episode_badge}
         <h3><a href="{href}">{esc(item['name'])}</a></h3>
-        <p>Sei arrivato all'episodio <strong>{esc(current_episode)}</strong> / {esc(item['last_episode'])}</p>
+        <p>Sei arrivato all'episodio <strong>{esc(current_episode)}</strong> / {esc(last_episode)}</p>
         <div class="row-actions">
           <form action="/watch/start" method="post">
             {csrf_input()}

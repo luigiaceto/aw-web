@@ -141,6 +141,8 @@ def handle_watch_start(fields: dict[str, list[str]]) -> bytes:
     anime = anime_from_json(anime_values[0])
     episode_num = fields.get("episode", [anime.curr_ep])[0]
     token = stream_token(provider_name, anime, episode_num)
+    _, anime, episode = stream_context(token)
+    save_watch_progress(provider_name, anime, episode)
     return redirect(f"/watch?token={q(token)}")
 
 

@@ -4,7 +4,7 @@ dynamic = ["version"]
 description = "Interfaccia web locale per guardare anime"
 readme = "README.md"
 license = "GPL-3.0"
-requires-python = "==3.13"
+requires-python = ">=3.13,<3.14"
 dependencies = [
     "httpx>=0.28.1",
     "pip-system-certs>=5.2",

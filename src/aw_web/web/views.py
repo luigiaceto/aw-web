@@ -229,7 +229,7 @@ def render_anime(params: dict[str, list[str]]) -> bytes:
     except Exception as exc:
         info_error = provider_error(exc)
     try:
-        if not anime.episodes() or not anime.has_all_episodes():
+        if saved or not anime.episodes() or not anime.has_all_episodes():
             provider.episodes(anime)
     except Exception as exc:
         episodes_error = provider_error(exc)

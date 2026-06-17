@@ -41,18 +41,22 @@ def episode_value(value: str) -> float:
 
 
 def has_new_episode(item: dict[str, Any], latest: list[Anime]) -> bool:
+    current = episode_value(str(item["current_episode"]))
+    return episode_value(available_last_episode(item, latest)) > current
+
+
+def available_last_episode(item: dict[str, Any], latest: list[Anime]) -> str:
     anime_data = json.loads(str(item["anime_json"]))
     anime = Anime.from_dict(anime_data)
-    current = episode_value(str(item["current_episode"]))
-
-    if episode_value(str(item["last_episode"])) > current:
-        return True
-
-    if any(episode_value(ep.num) > current for ep in anime._episodes):
-        return True
+    candidates = [
+        str(item["last_episode"]),
+        anime.last_ep,
+        *(ep.num for ep in anime._episodes),
+    ]
 
     for latest_anime in latest:
-        if anime == latest_anime and episode_value(latest_anime.curr_ep) > current:
-            return True
+        if anime == latest_anime:
+            candidates.extend([latest_anime.curr_ep, latest_anime.last_ep])
+            candidates.extend(ep.num for ep in latest_anime._episodes)
 
-    return False
+    return max(candidates, key=episode_value, default="0")
