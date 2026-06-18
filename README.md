@@ -49,6 +49,13 @@ uv tool install --managed-python --python 3.13 git+https://github.com/luigiaceto
 
 il primo comando installa python 3.13 dentro `uv` in modo da non interferire con altre installazioni python di sistema, mentre il secondo comando installa la WebApp come tool globale in un ambiente isolato.
 
+Dopo l'installazione potrebbe essere necessario aggiornare la shell per permettere di fargli eseguire `aw-web`. Dunque fare:
+
+```bash
+uv tool update-shell
+exec zsh
+```
+
 Per aggiornare `aw-web` all'ultima versione della repository, eseguire il comando:
 
 ```bash
