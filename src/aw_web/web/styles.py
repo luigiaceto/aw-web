@@ -67,7 +67,7 @@ section { margin-top: 34px; }
 .video-shell { position: relative; }
 .video-player { width: 100%; max-height: 72vh; background: #000; border: 1px solid var(--line); border-radius: 24px; box-shadow: 0 24px 80px rgba(0,0,0,.45); }
 .mode-pill { display: inline-flex; align-items: center; gap: 8px; padding: 8px 11px; border: 1px solid currentColor; border-radius: 999px; background: rgba(8, 10, 14, .78); font-size: .82rem; font-weight: 900; backdrop-filter: blur(12px); box-shadow: 0 10px 30px rgba(0,0,0,.32); white-space: nowrap; }
-.mode-pill span { width: 9px; height: 9px; border-radius: 50%; background: currentColor; box-shadow: 0 0 18px currentColor; }
+.mode-pill span { width: 9px; height: 9px; border-radius: 50%; color: inherit; background: currentColor; box-shadow: 0 0 18px currentColor; }
 .mode-direct { color: #8fd14f; }
 .mode-buffering { color: #7cc7ff; }
 .mode-proxy { color: #ffd166; }

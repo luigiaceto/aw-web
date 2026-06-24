@@ -325,7 +325,7 @@ def render_watch(params: dict[str, list[str]]) -> bytes:
 
     body = f"""
     <section class="watch-page">
-      <div class="section-title"><h2>{esc(anime.name)} - Ep. {esc(episode.num)}</h2><div id="playback-mode" class="mode-pill mode-direct"><span></span>Diretto</div></div>
+      <div class="section-title"><h2>{esc(anime.name)} - Ep. {esc(episode.num)}</h2><div id="playback-mode" class="mode-pill mode-direct"><span></span>Browser diretto</div></div>
       {f'<p class="error">{esc(direct_error)}</p>' if direct_error else ''}
       <div class="video-shell">
         <video id="player" class="video-player" controls autoplay playsinline preload="metadata"></video>
@@ -405,6 +405,19 @@ def render_watch(params: dict[str, list[str]]) -> bytes:
         video.load();
         video.play().catch(() => {{}});
       }}
+      async function showProxyErrorDetails() {{
+        if (!status) return;
+        try {{
+          const response = await fetch(proxyUrl, {{ headers: {{ Range: 'bytes=0-0' }} }});
+          if (response.ok) return;
+          const text = await response.text();
+          const doc = new DOMParser().parseFromString(text, 'text/html');
+          const detail = doc.querySelector('.error')?.textContent || text;
+          status.textContent = detail.trim() || `Errore proxy locale: HTTP ${{response.status}}.`;
+        }} catch (error) {{
+          status.textContent = 'Errore durante la riproduzione anche con proxy locale. Prova MPV/VLC.';
+        }}
+      }}
       video.addEventListener('loadedmetadata', () => {{
         const target = pendingResumeAt;
         if (!restored && target > 5 && target < video.duration - 10) {{
@@ -413,7 +426,7 @@ def render_watch(params: dict[str, list[str]]) -> bytes:
         restored = true;
       }});
       video.addEventListener('playing', () => {{
-        setMode(usingProxy ? 'proxy' : 'direct', usingProxy ? 'Proxy fallback' : 'Diretto');
+        setMode(usingProxy ? 'proxy' : 'direct', usingProxy ? 'Proxy fallback' : 'Browser diretto');
       }});
       video.addEventListener('waiting', () => {{
         setMode('buffering', usingProxy ? 'Buffering proxy' : 'Buffering');
@@ -422,6 +435,7 @@ def render_watch(params: dict[str, list[str]]) -> bytes:
         if (usingProxy) {{
           setMode('error', 'Errore video');
           if (status) status.textContent = 'Errore durante la riproduzione anche con proxy locale. Prova MPV/VLC.';
+          showProxyErrorDetails();
           return;
         }}
         useProxy();
@@ -430,7 +444,7 @@ def render_watch(params: dict[str, list[str]]) -> bytes:
         setMode('buffering', usingProxy ? 'Buffering proxy' : 'Buffering');
       }});
       if (directUrl) {{
-        setMode('direct', 'Diretto');
+        setMode('direct', 'Browser diretto');
         video.src = directUrl;
       }} else {{
         useProxy();

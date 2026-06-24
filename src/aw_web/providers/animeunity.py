@@ -143,7 +143,6 @@ class Animeunity(Provider):
                 status = AnimeStatus.UNKNOWN
         info = {
             "Categoria": data.get('type', ""),
-            "Audio": "Italiano" if data.get('dub') else "??",
             "Data di Uscita": data.get('date', ""),
             "Stagione": data.get('season', ""),
             "Studio": data.get('studio', ""),
