@@ -3,21 +3,16 @@ from unittest.mock import MagicMock
 import pytest
 
 from aw_web.anime import Anime
-from aw_web import utilities as ut
-from aw_web.services.playback import open_external_player, validate_local_stream_url, validate_media_url
+from aw_web.services.playback import validate_media_url
 from aw_web.services.streams import STREAM_TTL_SECONDS, resolve_episode_url, resolve_episode_urls, stream_context, stream_token
 from aw_web.web.components import page
 from aw_web.web.server import (
     ALLOWED_ORIGINS,
     WebHandler,
     favicon_bytes,
-    handle_play,
-    handle_play_token,
-    local_stream_url,
     should_refresh_stream_url,
 )
 from aw_web.web.state import CSRF_TOKEN, STREAMS
-from aw_web.web.utils import anime_to_json
 from aw_web.web.views import render_anime
 
 
@@ -41,127 +36,6 @@ def test_validate_media_url_allows_public_http_urls():
 def test_validate_media_url_rejects_local_targets(url):
     with pytest.raises(RuntimeError):
         validate_media_url(url)
-
-
-def test_validate_local_stream_url_allows_only_aw_web_stream_urls():
-    url = "http://127.0.0.1:8765/stream?token=abc"
-
-    assert validate_local_stream_url(url) == url
-
-    with pytest.raises(RuntimeError):
-        validate_local_stream_url("http://127.0.0.1:8765/admin?token=abc")
-    with pytest.raises(RuntimeError):
-        validate_local_stream_url("http://127.0.0.1:8765/stream")
-    with pytest.raises(RuntimeError):
-        validate_local_stream_url("http://127.0.0.1:9999/stream?token=abc")
-
-
-def test_external_player_uses_only_mpv_even_with_stale_non_mpv_config(monkeypatch):
-    calls = []
-    monkeypatch.setattr(ut, "config_data", {"player": {"type": "external", "path": "/usr/bin/external-player"}})
-
-    monkeypatch.setattr(
-        "aw_web.services.playback.shutil.which",
-        lambda name: "/usr/bin/mpv" if name == "mpv" else None,
-    )
-    monkeypatch.setattr(
-        "aw_web.services.playback.subprocess.Popen",
-        lambda command, **kwargs: calls.append(command),
-    )
-
-    open_external_player("https://cdn.example.com/video.mp4", "Episode 1")
-
-    assert calls == [
-        [
-            "/usr/bin/mpv",
-            "https://cdn.example.com/video.mp4",
-            "--force-media-title=Episode 1",
-            "--fullscreen",
-            "--keep-open",
-        ]
-    ]
-
-
-def test_external_player_can_use_local_stream_proxy_when_explicitly_allowed(monkeypatch):
-    calls = []
-    monkeypatch.setattr(ut, "config_data", {"player": {"type": "mpv", "path": "/usr/bin/mpv"}})
-    monkeypatch.setattr(
-        "aw_web.services.playback.subprocess.Popen",
-        lambda command, **kwargs: calls.append(command),
-    )
-
-    open_external_player("http://127.0.0.1:8765/stream?token=abc", "Episode 1", allow_local_stream=True)
-
-    assert calls == [
-        [
-            "/usr/bin/mpv",
-            "http://127.0.0.1:8765/stream?token=abc",
-            "--force-media-title=Episode 1",
-            "--fullscreen",
-            "--keep-open",
-        ]
-    ]
-
-
-def test_play_token_opens_mpv_through_local_stream_proxy(monkeypatch):
-    STREAMS.clear()
-    calls = []
-    saved = []
-    anime = Anime("Example", "provider-ref")
-    anime.update_episodes({"1": "episode-ref"})
-    token = stream_token("animeunity", anime, "1")
-
-    monkeypatch.setattr(
-        "aw_web.web.server.open_external_player",
-        lambda url, title, **kwargs: calls.append((url, title, kwargs)),
-    )
-    monkeypatch.setattr(
-        "aw_web.web.server.save_watch_progress",
-        lambda provider_name, saved_anime, episode: saved.append((provider_name, saved_anime.ref, episode.num)),
-    )
-
-    response = handle_play_token({"token": [token]})
-
-    assert response == f"REDIRECT:/watch?token={token}".encode("utf-8")
-    assert calls == [
-        (local_stream_url(token), "Example Ep. 1", {"allow_local_stream": True})
-    ]
-    assert saved == [("animeunity", "provider-ref", "1")]
-
-
-def test_play_opens_mpv_through_local_stream_proxy_without_resolving_direct_url(monkeypatch):
-    STREAMS.clear()
-    calls = []
-    saved = []
-    anime = Anime("Example", "provider-ref")
-    anime.update_episodes({"1": "episode-ref"})
-
-    monkeypatch.setattr(
-        "aw_web.web.server.open_external_player",
-        lambda url, title, **kwargs: calls.append((url, title, kwargs)),
-    )
-    monkeypatch.setattr(
-        "aw_web.web.server.save_watch_progress",
-        lambda provider_name, saved_anime, episode: saved.append((provider_name, saved_anime.ref, episode.num)),
-    )
-
-    response = handle_play(
-        {
-            "provider": ["animeunity"],
-            "anime": [anime_to_json(anime)],
-            "episode": ["1"],
-        }
-    )
-
-    token = next(iter(STREAMS))
-    assert response == (
-        b"REDIRECT:/anime?provider=animeunity&name=Example"
-        b"&ref=provider-ref&curr_ep=0&last_ep=0&anilist_id=0"
-    )
-    assert calls == [
-        (local_stream_url(token), "Example Ep. 1", {"allow_local_stream": True})
-    ]
-    assert saved == [("animeunity", "provider-ref", "1")]
 
 
 def test_stream_tokens_expire(monkeypatch):

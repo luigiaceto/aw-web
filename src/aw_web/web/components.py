@@ -119,28 +119,6 @@ def provider_match_card(anime: Anime, provider_name: str) -> str:
     """
 
 
-def quick_play_form(provider_name: str, anime: Anime, episode_num: str, label: str) -> str:
-    return f"""
-    <form action="/play" method="post">
-      {csrf_input()}
-      <input type="hidden" name="provider" value="{esc(provider_name)}">
-      <input type="hidden" name="anime" value="{esc(anime_to_json(anime))}">
-      <input type="hidden" name="episode" value="{esc(episode_num)}">
-      <button>{esc(label)}</button>
-    </form>
-    """
-
-
-def token_play_form(token: str, label: str) -> str:
-    return f"""
-    <form action="/play-token" method="post">
-      {csrf_input()}
-      <input type="hidden" name="token" value="{esc(token)}">
-      <button>{esc(label)}</button>
-    </form>
-    """
-
-
 def browser_play_form(provider_name: str, anime: Anime, episode_num: str, label: str) -> str:
     return f"""
     <form action="/watch/start" method="post">
@@ -273,14 +251,7 @@ def episode_row(provider_name: str, anime: Anime, episode: Anime.Episode, curren
           <input type="hidden" name="provider" value="{esc(provider_name)}">
           <input type="hidden" name="anime" value="{esc(anime_to_json(anime))}">
           <input type="hidden" name="episode" value="{esc(episode.num)}">
-          <button>Browser</button>
-        </form>
-        <form action="/play" method="post">
-          {csrf_input()}
-          <input type="hidden" name="provider" value="{esc(provider_name)}">
-          <input type="hidden" name="anime" value="{esc(anime_to_json(anime))}">
-          <input type="hidden" name="episode" value="{esc(episode.num)}">
-          <button class="secondary">MPV</button>
+          <button>Guarda</button>
         </form>
       </div>
     </div>

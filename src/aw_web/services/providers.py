@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import shutil
 from functools import lru_cache
 
 from aw_web import providers, utilities as ut
@@ -13,7 +12,6 @@ def ensure_config() -> None:
     ut.config_data = {
         "general": {"specials": False},
         "provider": {"source": "animeunity"},
-        "player": {"type": "mpv", "path": shutil.which("mpv") or ""},
     }
 
 

@@ -9,7 +9,6 @@ from secrets import compare_digest
 from urllib.parse import parse_qs, urlparse
 
 from aw_web.anime import Anime
-from aw_web.services.playback import open_external_player
 from aw_web.services.progress import save_watch_progress
 from aw_web.services.providers import get_provider, set_current_provider
 from aw_web.services.streams import resolve_episode_url, resolve_episode_urls, stream_context, stream_token
@@ -37,10 +36,6 @@ MEDIA_CONTENT_TYPES = {
     "application/x-mpegurl",
     "binary/octet-stream",
 }
-
-
-def local_stream_url(token: str) -> str:
-    return f"http://{HOST}:{PORT}/stream?token={q(token)}"
 
 
 def favicon_bytes() -> bytes:
@@ -131,26 +126,6 @@ def handle_remove_favorite(fields: dict[str, list[str]]) -> bytes:
     return redirect("/")
 
 
-def handle_play(fields: dict[str, list[str]]) -> bytes:
-    provider_name = fields.get("provider", [""])[0]
-    anime_values = fields.get("anime", ["{}"])
-    anime = anime_from_json(anime_values[0])
-    episode_num = fields.get("episode", [anime.curr_ep])[0]
-    token = stream_token(provider_name, anime, episode_num)
-    _, anime, episode = stream_context(token)
-    open_external_player(local_stream_url(token), str(episode), allow_local_stream=True)
-    save_watch_progress(provider_name, anime, episode)
-    return redirect(anime_redirect_url(provider_name, anime))
-
-
-def handle_play_token(fields: dict[str, list[str]]) -> bytes:
-    token = fields.get("token", [""])[0]
-    provider_name, anime, episode = stream_context(token)
-    open_external_player(local_stream_url(token), str(episode), allow_local_stream=True)
-    save_watch_progress(provider_name, anime, episode)
-    return redirect(f"/watch?token={q(token)}")
-
-
 def handle_watch_start(fields: dict[str, list[str]]) -> bytes:
     provider_name = fields.get("provider", [""])[0]
     anime_values = fields.get("anime", ["{}"])
@@ -225,10 +200,6 @@ class WebHandler(BaseHTTPRequestHandler):
                 payload = handle_toggle_favorite(fields)
             elif parsed.path == "/favorites/remove":
                 payload = handle_remove_favorite(fields)
-            elif parsed.path == "/play":
-                payload = handle_play(fields)
-            elif parsed.path == "/play-token":
-                payload = handle_play_token(fields)
             elif parsed.path == "/watch/start":
                 payload = handle_watch_start(fields)
             else:

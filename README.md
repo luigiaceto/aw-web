@@ -6,7 +6,7 @@ Interfaccia web locale per navigare e guardare anime senza pubblicità o pop-up.
 
 <img width="1470" height="877" alt="Screenshot 2026-06-16 alle 22 43 53" src="https://github.com/user-attachments/assets/254eb4e0-bc87-42bb-b0ad-25f833ad1f04" />
 
-`aw-web` avvia un sito web locale su `http://127.0.0.1:8765` con ricerca anime, ultimi episodi, watchlist, preferiti, anime stagionali, copertine e player integrato nel browser o con MPV.
+`aw-web` avvia un sito web locale su `http://127.0.0.1:8765` con ricerca anime, ultimi episodi, watchlist, preferiti, anime stagionali, copertine e player integrato nel browser.
 
 ## Indice
 
@@ -15,21 +15,18 @@ Interfaccia web locale per navigare e guardare anime senza pubblicità o pop-up.
 - [Utilizzo](#utilizzo)
 - [Anime Stagionali](#anime-stagionali)
 - [Watchlist, Preferiti e Database](#watchlist-preferiti-e-database)
-- [Player Browser e MPV](#player-browser-e-mpv)
+- [Player Browser](#player-browser)
 - [Domande Frequenti](#domande-frequenti)
 - [Problemi Noti](#problemi-noti)
 
 ## Installazione su MacOS (unico OS supportato e testato attualmente)
 
-La guida d'installazione comprende:
+La guida d'installazione richiede [uv](https://github.com/astral-sh/uv).
 
-- [uv](https://github.com/astral-sh/uv)
-- MPV, come video player fallback esterno
-
-Su macOS puoi installare `uv` e `mpv` tramite [Homebrew](https://brew.sh/) con:
+Su macOS puoi installare `uv` tramite [Homebrew](https://brew.sh/) con:
 
 ```bash
-brew install uv mpv
+brew install uv
 ```
 
 Dopo l'installazione di `uv` potrebbe essere necessario aggiornare la shell. Dunque fare:
@@ -98,7 +95,7 @@ Nella pagina anime puoi:
 - aggiungere o rimuovere l'anime dalla watchlist con il pulsante segnalibro;
 - aggiungere o rimuovere l'anime dai preferiti con il pulsante cuore;
 - scegliere un episodio;
-- guardarlo nel browser o aprirlo in MPV.
+- guardarlo nel browser.
 
 ## Anime Stagionali
 
@@ -130,11 +127,9 @@ Nel database vengono salvati:
 
 ATTENZIONE: in caso di cancellazione del database locale perderete i vostri progressi fatti su questa WebApp.
 
-## Player Browser e MPV
+## Player Browser
 
-`aw-web` supporta due modalità di riproduzione.
-
-### Browser
+`aw-web` usa solamente il player integrato nel browser.
 
 Il player browser prova prima la modalità diretta:
 
@@ -154,10 +149,6 @@ Nella pagina player viene mostrato un badge in alto a destra:
 - blu: `Buffering`
 - giallo: `Proxy fallback`
 - rosso: `Errore video`
-
-### MPV
-
-MPV resta disponibile come fallback esterno. Di solito è più efficiente e più robusto del player browser, soprattutto per seek, codec e stream problematici.
 
 ## Domande Frequenti
 
@@ -187,12 +178,6 @@ uv tool install aw-web
 
   Poi chiudi e riapri il terminale.
 
-- Se il player browser fallisce, prova il pulsante MPV.
-
-- Se MPV non si apre, verifica che sia installato e disponibile nel PATH:
-
-  ```bash
-  which mpv
-  ```
+- Se il player browser fallisce, riapri l'episodio: l'app proverà il proxy locale e i mirror video disponibili.
 
 - Se appare un errore di certificati SSL, potrebbe essere necessario aggiornare i certificati del sistema.

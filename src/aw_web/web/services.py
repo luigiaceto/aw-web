@@ -21,7 +21,7 @@ from aw_web.services.matching import (
     find_seasonal_matches,
     seasonal_open_url,
 )
-from aw_web.services.playback import open_external_player, validate_media_url
+from aw_web.services.playback import validate_media_url
 from aw_web.services.progress import save_watch_progress
 from aw_web.services.providers import (
     default_provider_name,
@@ -58,7 +58,6 @@ __all__ = [
     "get_cover",
     "get_provider",
     "normalize_season",
-    "open_external_player",
     "prune_streams",
     "resolve_episode_url",
     "save_watch_progress",
