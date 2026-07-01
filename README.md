@@ -1,12 +1,10 @@
 # aw-web
 
-Interfaccia web locale per navigare e guardare anime senza pubblicità o pop-up.
+Interfaccia web locale per navigare e guardare anime senza pubblicità o pop-up. Include funzionalità come: ricerca anime, ultimi episodi, watchlist, preferiti, anime stagionali.
 
-<img width="1470" height="877" alt="Screenshot 2026-06-16 alle 22 44 26" src="https://github.com/user-attachments/assets/8b0e6ec5-3dc2-42ab-8b3d-f1cef255a7c9" />
+<img width="1393" height="878" alt="Screenshot 2026-07-01 alle 15 35 44" src="https://github.com/user-attachments/assets/ac815b87-c940-401d-b2bb-99fa778181ce" />
 
-<img width="1470" height="877" alt="Screenshot 2026-06-16 alle 22 43 53" src="https://github.com/user-attachments/assets/254eb4e0-bc87-42bb-b0ad-25f833ad1f04" />
-
-`aw-web` avvia un sito web locale su `http://127.0.0.1:8765` con ricerca anime, ultimi episodi, watchlist, preferiti, anime stagionali e copertine. La riproduzione viene aperta in MPV.
+<img width="1395" height="877" alt="Screenshot 2026-07-01 alle 15 35 54" src="https://github.com/user-attachments/assets/711fb998-574a-437c-ae14-8bcfd959fc3c" />
 
 ## Indice
 
@@ -16,8 +14,6 @@ Interfaccia web locale per navigare e guardare anime senza pubblicità o pop-up.
 - [Anime Stagionali](#anime-stagionali)
 - [Watchlist, Preferiti e Database](#watchlist-preferiti-e-database)
 - [Player MPV](#player-mpv)
-- [Domande Frequenti](#domande-frequenti)
-- [Problemi Noti](#problemi-noti)
 
 ## Installazione su MacOS (unico OS supportato e testato attualmente)
 
