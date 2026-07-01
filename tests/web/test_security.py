@@ -172,10 +172,10 @@ def test_handle_play_opens_mpv_and_saves_progress(monkeypatch):
     opened = []
     saved = []
 
-    monkeypatch.setattr("aw_web.web.server.get_provider", lambda provider_name: provider)
-    monkeypatch.setattr("aw_web.web.server.open_external_player", lambda url, title: opened.append((url, title)))
+    monkeypatch.setattr("aw_web.services.playback.get_provider", lambda provider_name: provider)
+    monkeypatch.setattr("aw_web.services.playback.open_external_player", lambda url, title: opened.append((url, title)))
     monkeypatch.setattr(
-        "aw_web.web.server.save_watch_progress",
+        "aw_web.services.playback.save_watch_progress",
         lambda provider_name, saved_anime, episode: saved.append((provider_name, saved_anime.ref, episode.num)),
     )
 

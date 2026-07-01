@@ -10,6 +10,9 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from aw_web import utilities as ut
+from aw_web.anime import Anime
+from aw_web.services.progress import save_watch_progress
+from aw_web.services.providers import get_provider
 
 
 _BLOCKED_HOSTS = {"localhost"}
@@ -85,3 +88,14 @@ def open_external_player(url: str, title: str) -> None:
         subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     except OSError as exc:
         raise RuntimeError(f"Impossibile avviare MPV: {exc}") from exc
+
+
+def play_episode(provider_name: str, anime: Anime, episode_num: str) -> None:
+    provider = get_provider(provider_name)
+    if not anime.has_episode(episode_num):
+        provider.episodes(anime)
+
+    episode = anime.episode(episode_num)
+    url = provider.episode_link(anime, episode)
+    open_external_player(url, str(episode))
+    save_watch_progress(provider_name, anime, episode)

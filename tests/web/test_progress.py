@@ -12,9 +12,9 @@ def test_play_saves_progress(monkeypatch):
     def fake_save_watch_progress(provider_name, saved_anime, episode):
         saved.append((provider_name, saved_anime.ref, episode.num))
 
-    monkeypatch.setattr("aw_web.web.server.get_provider", lambda provider_name: provider)
-    monkeypatch.setattr("aw_web.web.server.open_external_player", lambda url, title: None)
-    monkeypatch.setattr("aw_web.web.server.save_watch_progress", fake_save_watch_progress)
+    monkeypatch.setattr("aw_web.services.playback.get_provider", lambda provider_name: provider)
+    monkeypatch.setattr("aw_web.services.playback.open_external_player", lambda url, title: None)
+    monkeypatch.setattr("aw_web.services.playback.save_watch_progress", fake_save_watch_progress)
 
     response = handle_play(
         {

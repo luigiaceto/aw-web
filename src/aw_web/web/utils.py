@@ -19,8 +19,12 @@ def q(value: object) -> str:
 
 
 def parse_int(value: object, default: int = 0) -> int:
+    if value is None:
+        return default
+    if not isinstance(value, (str, int, float)):
+        return default
     try:
-        return int(value or default)
+        return int(value)
     except (TypeError, ValueError):
         return default
 

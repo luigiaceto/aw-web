@@ -64,12 +64,13 @@ class Anime:
 
         return hash(self.name)
 
-    def update_episodes(self, episodes: dict[str, str] = {}, specials: bool = True) -> None:
+    def update_episodes(self, episodes: dict[str, str] | None = None, specials: bool = True) -> None:
         """
         Imposta i riferimenti degli episodi dell'anime.
         Args:
             episodes (dict[str, str]): dizionario dei riferimenti degli episodi dell'anime (numero->URL/ID).
         """
+        episodes = episodes or {}
         for num, ref in episodes.items():
             if not specials and ("." in num or num == "0"):
                 continue

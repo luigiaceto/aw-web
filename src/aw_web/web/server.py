@@ -9,11 +9,16 @@ from secrets import compare_digest
 from urllib.parse import parse_qs, urlparse
 
 from aw_web.anime import Anime
-from aw_web.services.playback import open_external_player
-from aw_web.services.progress import save_watch_progress
-from aw_web.services.providers import get_provider, set_current_provider
+from aw_web.services.collections import (
+    remove_favorite_item,
+    remove_watch_item,
+    toggle_favorite,
+    toggle_watchlist,
+)
+from aw_web.services.playback import play_episode
+from aw_web.services.providers import set_current_provider
 from aw_web.web.components import page
-from aw_web.web.state import CSRF_TOKEN, DB, HOST, PORT
+from aw_web.web.state import CSRF_TOKEN, HOST, PORT
 from aw_web.web.utils import anime_from_json, esc, q
 from aw_web.web.views import (
     redirect,
@@ -33,21 +38,6 @@ def favicon_bytes() -> bytes:
     return files("aw_web.web").joinpath("static/favicon.ico").read_bytes()
 
 
-def handle_add_watchlist(fields: dict[str, list[str]]) -> bytes:
-    provider_name = fields.get("provider", [""])[0]
-    anime_values = fields.get("anime", ["{}"])
-    anime = anime_from_json(anime_values[0])
-    existing = DB.find_watch_item(provider_name, anime.ref)
-    DB.upsert_watch_item(
-        provider=provider_name,
-        anime_data=anime.to_dict(),
-        cover_url=fields.get("cover_url", [""])[0],
-        banner_url=fields.get("banner_url", [""])[0],
-        current_episode=str(existing["current_episode"]) if existing else "0",
-    )
-    return redirect(f"/anime?saved=1&provider={q(provider_name)}&ref={q(anime.ref)}")
-
-
 def anime_redirect_url(provider_name: str, anime: Anime) -> str:
     return (
         f"/anime?provider={q(provider_name)}&name={q(anime.name)}&ref={q(anime.ref)}"
@@ -58,50 +48,36 @@ def anime_redirect_url(provider_name: str, anime: Anime) -> str:
 def handle_toggle_watchlist(fields: dict[str, list[str]]) -> bytes:
     provider_name = fields.get("provider", [""])[0]
     anime = anime_from_json(fields.get("anime", ["{}"])[0])
-    existing = DB.find_watch_item(provider_name, anime.ref)
-    if existing:
-        DB.remove_watch_item_by_ref(provider_name, anime.ref)
-    else:
-        history = DB.find_history_item(provider_name, anime.ref)
-        DB.upsert_watch_item(
-            provider=provider_name,
-            anime_data=anime.to_dict(),
-            cover_url=fields.get("cover_url", [""])[0],
-            banner_url=fields.get("banner_url", [""])[0],
-            current_episode=str(history["current_episode"]) if history else "0",
-        )
+    toggle_watchlist(
+        provider_name,
+        anime,
+        fields.get("cover_url", [""])[0],
+        fields.get("banner_url", [""])[0],
+    )
     return redirect(anime_redirect_url(provider_name, anime))
 
 
 def handle_toggle_favorite(fields: dict[str, list[str]]) -> bytes:
     provider_name = fields.get("provider", [""])[0]
     anime = anime_from_json(fields.get("anime", ["{}"])[0])
-    existing = DB.find_favorite_item(provider_name, anime.ref)
-    if existing:
-        DB.remove_favorite_item_by_ref(provider_name, anime.ref)
-    else:
-        history = DB.find_history_item(provider_name, anime.ref)
-        DB.upsert_favorite_item(
-            provider=provider_name,
-            anime_data=anime.to_dict(),
-            cover_url=fields.get("cover_url", [""])[0],
-            banner_url=fields.get("banner_url", [""])[0],
-            current_episode=str(history["current_episode"]) if history else "0",
-        )
+    toggle_favorite(
+        provider_name,
+        anime,
+        fields.get("cover_url", [""])[0],
+        fields.get("banner_url", [""])[0],
+    )
     return redirect(anime_redirect_url(provider_name, anime))
 
 
 def handle_remove_watchlist(fields: dict[str, list[str]]) -> bytes:
     item_id = int(fields.get("id", ["0"])[0] or 0)
-    if item_id:
-        DB.remove_watch_item(item_id)
+    remove_watch_item(item_id)
     return redirect("/")
 
 
 def handle_remove_favorite(fields: dict[str, list[str]]) -> bytes:
     item_id = int(fields.get("id", ["0"])[0] or 0)
-    if item_id:
-        DB.remove_favorite_item(item_id)
+    remove_favorite_item(item_id)
     return redirect("/")
 
 
@@ -110,14 +86,7 @@ def handle_play(fields: dict[str, list[str]]) -> bytes:
     anime_values = fields.get("anime", ["{}"])
     anime = anime_from_json(anime_values[0])
     episode_num = fields.get("episode", [anime.curr_ep])[0]
-    provider = get_provider(provider_name)
-
-    if not anime.has_episode(episode_num):
-        provider.episodes(anime)
-    episode = anime.episode(episode_num)
-    url = provider.episode_link(anime, episode)
-    open_external_player(url, str(episode))
-    save_watch_progress(provider_name, anime, episode)
+    play_episode(provider_name, anime, episode_num)
     return redirect(anime_redirect_url(provider_name, anime))
 
 
@@ -170,8 +139,6 @@ class WebHandler(BaseHTTPRequestHandler):
                 self.send_response(204)
                 self.end_headers()
                 return
-            elif parsed.path == "/watchlist/add":
-                payload = handle_add_watchlist(fields)
             elif parsed.path == "/watchlist/toggle":
                 payload = handle_toggle_watchlist(fields)
             elif parsed.path == "/watchlist/remove":

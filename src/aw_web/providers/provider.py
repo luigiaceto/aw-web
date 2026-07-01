@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from httpx import Client, HTTPError  # , AsyncClient
+from httpx import Client, HTTPError
 from ..anime import Anime
 from .. import utilities as ut
 

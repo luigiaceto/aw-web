@@ -36,7 +36,10 @@ def test_history_does_not_create_watch_item(tmp_path):
         current_episode="3",
     )
 
-    assert db.find_history_item("animeunity", "test-ref")["current_episode"] == "3"
+    history_item = db.find_history_item("animeunity", "test-ref")
+
+    assert history_item is not None
+    assert history_item["current_episode"] == "3"
     assert db.find_watch_item("animeunity", "test-ref") is None
 
 

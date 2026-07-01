@@ -21,6 +21,17 @@ SEASON_LABELS = {
 }
 
 
+def _as_int(value: object, default: int = 0) -> int:
+    if value is None:
+        return default
+    if not isinstance(value, (str, int, float)):
+        return default
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
 @dataclass(frozen=True)
 class SeasonalAnime:
     anilist_id: int
@@ -136,7 +147,7 @@ def _seasonal_from_media(data: dict[str, object]) -> SeasonalAnime:
     synonyms_data = data.get("synonyms")
     genres_data = data.get("genres")
     return SeasonalAnime(
-        anilist_id=int(data.get("id") or 0),
+        anilist_id=_as_int(data.get("id")),
         title=title_english or title_romaji or title_native,
         title_romaji=title_romaji,
         title_english=title_english,
@@ -145,9 +156,9 @@ def _seasonal_from_media(data: dict[str, object]) -> SeasonalAnime:
         cover_url=str(cover_data.get("extraLarge") or cover_data.get("large") or "") if isinstance(cover_data, dict) else "",
         banner_url=str(data.get("bannerImage") or ""),
         status=str(data.get("status") or ""),
-        episodes=int(data.get("episodes") or 0),
+        episodes=_as_int(data.get("episodes")),
         genres=tuple(str(item) for item in genres_data[:3]) if isinstance(genres_data, list) else (),
-        average_score=int(data.get("averageScore") or 0),
+        average_score=_as_int(data.get("averageScore")),
     )
 
 

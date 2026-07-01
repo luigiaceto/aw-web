@@ -1,4 +1,3 @@
-# pyright: reportUnusedImport=false
 from .provider import Provider, ProviderError
 
 PROVIDERS_AVAILABLE = {
