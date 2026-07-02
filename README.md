@@ -112,12 +112,13 @@ Watchlist, preferiti e cache delle copertine degli anime vengono salvati in un d
 ~/.aw-web/web.sqlite3
 ```
 
-> [!IMPORTANT] Il progetto è ancora in fase di sviluppo, dunque potrebbe essere possibile, durante un aggiornamento, che venga cambiata la firma del database (colonne usate). Dunque può accadere che il database diventi invalido per la nuova versione dell'app, ne segue che occorre resettarlo. Per fare ciò, chiudere l'app ed eseguire nel terminale:
-
+> [!IMPORTANT]
+> Il progetto è ancora in fase di sviluppo, dunque potrebbe essere possibile, durante un aggiornamento, che venga cambiata la firma del database (colonne usate). Dunque può accadere che il database diventi invalido per la nuova versione dell'app, ne segue che occorre resettarlo. Per fare ciò, chiudere l'app ed eseguire nel terminale:
+>
 > ```bash
 > aw-web --reset-db
 > ```
-
+>
 > Al prossimo avvio dell'app verrà dunque ricreato il database nuovo ma perderete tutti i vostri progressi (watchlist e preferiti). Lo sviluppatore si impegna a minimizzare i cambi al database.
 > Si consiglia quindi di non fare affidamente esclusivamente a quest'app per tenere traccia della propria watchlist.
 
