@@ -233,9 +233,6 @@ def _validate_table_schema(
     errors.extend(f"Colonna mancante in {table}: {column}" for column in missing_columns)
     errors.extend(f"Colonna non prevista in {table}: {column}" for column in extra_columns)
 
-    if not missing_columns and not extra_columns and actual_names != expected_names:
-        errors.append(f"Ordine colonne non valido in {table}")
-
     actual_by_name = {column.name: column for column in actual_columns}
     for expected in expected_columns:
         actual = actual_by_name.get(expected.name)

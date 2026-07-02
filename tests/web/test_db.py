@@ -153,6 +153,39 @@ def test_validate_database_schema_fails_on_wrong_column_signature(tmp_path):
     assert any("Firma colonna non valida in watchlist.provider" in error for error in errors)
 
 
+def test_validate_database_schema_accepts_same_columns_in_different_order(tmp_path):
+    db_path = tmp_path / "web.sqlite3"
+    WebDatabase(db_path)
+    with sqlite3.connect(db_path) as conn:
+        conn.execute("ALTER TABLE watchlist RENAME TO watchlist_old")
+        conn.execute(
+            """
+            CREATE TABLE watchlist (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                provider TEXT NOT NULL,
+                name TEXT NOT NULL,
+                ref TEXT NOT NULL,
+                anilist_id INTEGER NOT NULL DEFAULT 0,
+                current_episode TEXT NOT NULL DEFAULT '0',
+                last_episode TEXT NOT NULL DEFAULT '0',
+                status TEXT NOT NULL DEFAULT 'Sconosciuto',
+                cover_url TEXT NOT NULL DEFAULT '',
+                banner_url TEXT NOT NULL DEFAULT '',
+                anime_json TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                episodes_checked_at TEXT NOT NULL DEFAULT '',
+                UNIQUE(provider, ref)
+            )
+            """
+        )
+        conn.execute("DROP TABLE watchlist_old")
+
+    errors = validate_database_schema(db_path)
+
+    assert errors == []
+
+
 def test_episode_progress_table_is_removed(tmp_path):
     db = WebDatabase(tmp_path / "web.sqlite3")
 
