@@ -47,14 +47,6 @@ uv tool install --managed-python --python 3.13 git+https://github.com/luigiaceto
 
 il primo comando installa python 3.13 dentro `uv` in modo da non interferire con altre installazioni python di sistema, mentre il secondo comando installa la WebApp come tool globale in un ambiente isolato.
 
-## Come Aggiornare l'App
-
-Per aggiornare `aw-web` all'ultima versione della repository, eseguire il comando:
-
-```bash
-uv tool install --force --managed-python --python 3.13 git+https://github.com/luigiaceto/aw-web.git
-```
-
 ## Avvio
 
 Avvia da terminale il server locale con:
@@ -70,6 +62,14 @@ http://127.0.0.1:8765
 ```
 
 Per fermarla, torna nel terminale e premi `Ctrl+C`.
+
+## Come Aggiornare l'App
+
+Per aggiornare `aw-web` all'ultima versione della repository, eseguire il comando:
+
+```bash
+uv tool install --force --managed-python --python 3.13 git+https://github.com/luigiaceto/aw-web.git
+```
 
 ## Utilizzo
 
@@ -120,7 +120,7 @@ Watchlist, preferiti e cache delle copertine degli anime vengono salvati in un d
 > ```
 >
 > Al prossimo avvio dell'app verrà dunque ricreato il database nuovo ma perderete tutti i vostri progressi (watchlist e preferiti). Lo sviluppatore si impegna a minimizzare i cambi al database.
-> Si consiglia quindi di non fare affidamente esclusivamente a quest'app per tenere traccia della propria watchlist.
+> Si consiglia quindi di non fare affidamente esclusivamente su quest'app per tenere traccia della propria watchlist.
 
 ## Player MPV
 
