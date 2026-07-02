@@ -2,17 +2,252 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
 COVER_CACHE_TTL_DAYS = 30
+ALLOWED_INTERNAL_TABLES = {"sqlite_sequence"}
+
+
+@dataclass(frozen=True)
+class ColumnSignature:
+    name: str
+    type: str
+    notnull: int
+    default: str | None
+    pk: int
+
+
+@dataclass(frozen=True)
+class DatabasePreparation:
+    path: Path
+    created: bool
+    valid: bool
+    errors: tuple[str, ...]
+
+
+EXPECTED_SCHEMA: dict[str, tuple[ColumnSignature, ...]] = {
+    "watchlist": (
+        ColumnSignature("id", "INTEGER", 0, None, 1),
+        ColumnSignature("provider", "TEXT", 1, None, 0),
+        ColumnSignature("name", "TEXT", 1, None, 0),
+        ColumnSignature("ref", "TEXT", 1, None, 0),
+        ColumnSignature("anilist_id", "INTEGER", 1, "0", 0),
+        ColumnSignature("current_episode", "TEXT", 1, "'0'", 0),
+        ColumnSignature("last_episode", "TEXT", 1, "'0'", 0),
+        ColumnSignature("status", "TEXT", 1, "'Sconosciuto'", 0),
+        ColumnSignature("cover_url", "TEXT", 1, "''", 0),
+        ColumnSignature("banner_url", "TEXT", 1, "''", 0),
+        ColumnSignature("anime_json", "TEXT", 1, None, 0),
+        ColumnSignature("episodes_checked_at", "TEXT", 1, "''", 0),
+        ColumnSignature("created_at", "TEXT", 1, "CURRENT_TIMESTAMP", 0),
+        ColumnSignature("updated_at", "TEXT", 1, "CURRENT_TIMESTAMP", 0),
+    ),
+    "cover_cache": (
+        ColumnSignature("cache_key", "TEXT", 0, None, 1),
+        ColumnSignature("anilist_id", "INTEGER", 1, "0", 0),
+        ColumnSignature("title", "TEXT", 1, "''", 0),
+        ColumnSignature("cover_url", "TEXT", 1, "''", 0),
+        ColumnSignature("banner_url", "TEXT", 1, "''", 0),
+        ColumnSignature("color", "TEXT", 1, "''", 0),
+        ColumnSignature("updated_at", "TEXT", 1, "CURRENT_TIMESTAMP", 0),
+    ),
+    "favorites": (
+        ColumnSignature("id", "INTEGER", 0, None, 1),
+        ColumnSignature("provider", "TEXT", 1, None, 0),
+        ColumnSignature("name", "TEXT", 1, None, 0),
+        ColumnSignature("ref", "TEXT", 1, None, 0),
+        ColumnSignature("anilist_id", "INTEGER", 1, "0", 0),
+        ColumnSignature("current_episode", "TEXT", 1, "'0'", 0),
+        ColumnSignature("last_episode", "TEXT", 1, "'0'", 0),
+        ColumnSignature("status", "TEXT", 1, "'Sconosciuto'", 0),
+        ColumnSignature("cover_url", "TEXT", 1, "''", 0),
+        ColumnSignature("banner_url", "TEXT", 1, "''", 0),
+        ColumnSignature("anime_json", "TEXT", 1, None, 0),
+        ColumnSignature("created_at", "TEXT", 1, "CURRENT_TIMESTAMP", 0),
+        ColumnSignature("updated_at", "TEXT", 1, "CURRENT_TIMESTAMP", 0),
+    ),
+    "watch_history": (
+        ColumnSignature("provider", "TEXT", 1, None, 1),
+        ColumnSignature("name", "TEXT", 1, None, 0),
+        ColumnSignature("ref", "TEXT", 1, None, 2),
+        ColumnSignature("anilist_id", "INTEGER", 1, "0", 0),
+        ColumnSignature("current_episode", "TEXT", 1, "'0'", 0),
+        ColumnSignature("last_episode", "TEXT", 1, "'0'", 0),
+        ColumnSignature("status", "TEXT", 1, "'Sconosciuto'", 0),
+        ColumnSignature("cover_url", "TEXT", 1, "''", 0),
+        ColumnSignature("banner_url", "TEXT", 1, "''", 0),
+        ColumnSignature("anime_json", "TEXT", 1, None, 0),
+        ColumnSignature("updated_at", "TEXT", 1, "CURRENT_TIMESTAMP", 0),
+    ),
+}
+
+
+CREATE_TABLE_STATEMENTS = (
+    """
+    CREATE TABLE IF NOT EXISTS watchlist (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        provider TEXT NOT NULL,
+        name TEXT NOT NULL,
+        ref TEXT NOT NULL,
+        anilist_id INTEGER NOT NULL DEFAULT 0,
+        current_episode TEXT NOT NULL DEFAULT '0',
+        last_episode TEXT NOT NULL DEFAULT '0',
+        status TEXT NOT NULL DEFAULT 'Sconosciuto',
+        cover_url TEXT NOT NULL DEFAULT '',
+        banner_url TEXT NOT NULL DEFAULT '',
+        anime_json TEXT NOT NULL,
+        episodes_checked_at TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(provider, ref)
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS cover_cache (
+        cache_key TEXT PRIMARY KEY,
+        anilist_id INTEGER NOT NULL DEFAULT 0,
+        title TEXT NOT NULL DEFAULT '',
+        cover_url TEXT NOT NULL DEFAULT '',
+        banner_url TEXT NOT NULL DEFAULT '',
+        color TEXT NOT NULL DEFAULT '',
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS favorites (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        provider TEXT NOT NULL,
+        name TEXT NOT NULL,
+        ref TEXT NOT NULL,
+        anilist_id INTEGER NOT NULL DEFAULT 0,
+        current_episode TEXT NOT NULL DEFAULT '0',
+        last_episode TEXT NOT NULL DEFAULT '0',
+        status TEXT NOT NULL DEFAULT 'Sconosciuto',
+        cover_url TEXT NOT NULL DEFAULT '',
+        banner_url TEXT NOT NULL DEFAULT '',
+        anime_json TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(provider, ref)
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS watch_history (
+        provider TEXT NOT NULL,
+        name TEXT NOT NULL,
+        ref TEXT NOT NULL,
+        anilist_id INTEGER NOT NULL DEFAULT 0,
+        current_episode TEXT NOT NULL DEFAULT '0',
+        last_episode TEXT NOT NULL DEFAULT '0',
+        status TEXT NOT NULL DEFAULT 'Sconosciuto',
+        cover_url TEXT NOT NULL DEFAULT '',
+        banner_url TEXT NOT NULL DEFAULT '',
+        anime_json TEXT NOT NULL,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY(provider, ref)
+    )
+    """,
+)
 
 
 def default_db_path() -> Path:
     path = Path.home() / ".aw-web" / "web.sqlite3"
     path.parent.mkdir(parents=True, exist_ok=True)
     return path
+
+
+def create_schema(conn: sqlite3.Connection) -> None:
+    for statement in CREATE_TABLE_STATEMENTS:
+        conn.execute(statement)
+
+
+def prepare_database(path: Path | None = None) -> DatabasePreparation:
+    db_path = path or default_db_path()
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    created = not db_path.exists()
+    if created:
+        with sqlite3.connect(db_path) as conn:
+            create_schema(conn)
+
+    errors = validate_database_schema(db_path)
+    return DatabasePreparation(
+        path=db_path,
+        created=created,
+        valid=not errors,
+        errors=tuple(errors),
+    )
+
+
+def validate_database_schema(path: Path) -> list[str]:
+    if not path.exists():
+        return [f"Database inesistente: {path}"]
+
+    errors: list[str] = []
+    try:
+        with sqlite3.connect(path) as conn:
+            conn.row_factory = sqlite3.Row
+            table_rows = conn.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'table'"
+            ).fetchall()
+            actual_tables = {str(row["name"]) for row in table_rows}
+
+            expected_tables = set(EXPECTED_SCHEMA)
+            missing_tables = sorted(expected_tables - actual_tables)
+            extra_tables = sorted(actual_tables - expected_tables - ALLOWED_INTERNAL_TABLES)
+            errors.extend(f"Tabella mancante: {table}" for table in missing_tables)
+            errors.extend(f"Tabella non prevista: {table}" for table in extra_tables)
+
+            for table in sorted(expected_tables & actual_tables):
+                errors.extend(_validate_table_schema(conn, table, EXPECTED_SCHEMA[table]))
+    except sqlite3.DatabaseError as exc:
+        return [f"Errore apertura database: {exc}"]
+
+    return errors
+
+
+def _validate_table_schema(
+    conn: sqlite3.Connection,
+    table: str,
+    expected_columns: tuple[ColumnSignature, ...],
+) -> list[str]:
+    rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
+    actual_columns = tuple(
+        ColumnSignature(
+            name=str(row["name"]),
+            type=str(row["type"]),
+            notnull=int(row["notnull"]),
+            default=row["dflt_value"] if row["dflt_value"] is None else str(row["dflt_value"]),
+            pk=int(row["pk"]),
+        )
+        for row in rows
+    )
+    errors: list[str] = []
+    expected_names = [column.name for column in expected_columns]
+    actual_names = [column.name for column in actual_columns]
+
+    missing_columns = [name for name in expected_names if name not in actual_names]
+    extra_columns = [name for name in actual_names if name not in expected_names]
+    errors.extend(f"Colonna mancante in {table}: {column}" for column in missing_columns)
+    errors.extend(f"Colonna non prevista in {table}: {column}" for column in extra_columns)
+
+    if not missing_columns and not extra_columns and actual_names != expected_names:
+        errors.append(f"Ordine colonne non valido in {table}")
+
+    actual_by_name = {column.name: column for column in actual_columns}
+    for expected in expected_columns:
+        actual = actual_by_name.get(expected.name)
+        if actual is None:
+            continue
+        if actual != expected:
+            errors.append(
+                "Firma colonna non valida in "
+                f"{table}.{expected.name}: attesa {expected}, trovata {actual}"
+            )
+
+    return errors
 
 
 class WebDatabase:
@@ -27,78 +262,7 @@ class WebDatabase:
 
     def _init(self) -> None:
         with self.connect() as conn:
-            conn.execute(
-                """
-                CREATE TABLE IF NOT EXISTS watchlist (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    provider TEXT NOT NULL,
-                    name TEXT NOT NULL,
-                    ref TEXT NOT NULL,
-                    anilist_id INTEGER NOT NULL DEFAULT 0,
-                    current_episode TEXT NOT NULL DEFAULT '0',
-                    last_episode TEXT NOT NULL DEFAULT '0',
-                    status TEXT NOT NULL DEFAULT 'Sconosciuto',
-                    cover_url TEXT NOT NULL DEFAULT '',
-                    banner_url TEXT NOT NULL DEFAULT '',
-                    anime_json TEXT NOT NULL,
-                    episodes_checked_at TEXT NOT NULL DEFAULT '',
-                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    UNIQUE(provider, ref)
-                )
-                """
-            )
-            conn.execute(
-                """
-                CREATE TABLE IF NOT EXISTS cover_cache (
-                    cache_key TEXT PRIMARY KEY,
-                    anilist_id INTEGER NOT NULL DEFAULT 0,
-                    title TEXT NOT NULL DEFAULT '',
-                    cover_url TEXT NOT NULL DEFAULT '',
-                    banner_url TEXT NOT NULL DEFAULT '',
-                    color TEXT NOT NULL DEFAULT '',
-                    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-                )
-                """
-            )
-            conn.execute(
-                """
-                CREATE TABLE IF NOT EXISTS favorites (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    provider TEXT NOT NULL,
-                    name TEXT NOT NULL,
-                    ref TEXT NOT NULL,
-                    anilist_id INTEGER NOT NULL DEFAULT 0,
-                    current_episode TEXT NOT NULL DEFAULT '0',
-                    last_episode TEXT NOT NULL DEFAULT '0',
-                    status TEXT NOT NULL DEFAULT 'Sconosciuto',
-                    cover_url TEXT NOT NULL DEFAULT '',
-                    banner_url TEXT NOT NULL DEFAULT '',
-                    anime_json TEXT NOT NULL,
-                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    UNIQUE(provider, ref)
-                )
-                """
-            )
-            conn.execute(
-                """
-                CREATE TABLE IF NOT EXISTS watch_history (
-                    provider TEXT NOT NULL,
-                    name TEXT NOT NULL,
-                    ref TEXT NOT NULL,
-                    anilist_id INTEGER NOT NULL DEFAULT 0,
-                    current_episode TEXT NOT NULL DEFAULT '0',
-                    last_episode TEXT NOT NULL DEFAULT '0',
-                    status TEXT NOT NULL DEFAULT 'Sconosciuto',
-                    cover_url TEXT NOT NULL DEFAULT '',
-                    banner_url TEXT NOT NULL DEFAULT '',
-                    anime_json TEXT NOT NULL,
-                    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    PRIMARY KEY(provider, ref)
-                )
-                """
-            )
+            create_schema(conn)
             conn.execute(
                 "DELETE FROM cover_cache WHERE updated_at < ?",
                 (self._cover_cache_cutoff(),),

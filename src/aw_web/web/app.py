@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Sequence
 
 from aw_web.services.providers import ensure_config
-from aw_web.web.db import default_db_path
+from aw_web.web.db import default_db_path, prepare_database
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -53,13 +53,25 @@ def main(argv: Sequence[str] | None = None) -> None:
         return
 
     ensure_config()
+    db_result = prepare_database(default_db_path())
+    print(f"Database watchlist: {db_result.path}")
+    if db_result.created:
+        print("Database creato correttamente")
+    if db_result.valid:
+        print("Database validato con successo")
+    else:
+        print("Validazione database fallita")
+        for error in db_result.errors:
+            print(f"- {error}")
+        print("Esegui aw-web --reset-db per cancellare e ricreare il database locale")
+        sys.exit(1)
+
     from aw_web.web.server import WebHandler
-    from aw_web.web.state import DB, HOST, PORT
+    from aw_web.web.state import HOST, PORT
 
     server = ThreadingHTTPServer((HOST, PORT), WebHandler)
     url = f"http://{HOST}:{PORT}"
     print(f"aw-web avviato su {url}")
-    print(f"Database watchlist: {DB.path}")
 
     def _sigterm(signum: int, frame: object) -> None:
         print("\nWebapp chiusa, a presto!")
