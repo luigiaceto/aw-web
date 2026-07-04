@@ -96,6 +96,5 @@ TODO.md
 # Fixtures for tests
 tests/fixtures/
 .DS_Store
-*.png
 AGENTS.md
 .uv-cache
