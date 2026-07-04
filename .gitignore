@@ -97,3 +97,5 @@ TODO.md
 tests/fixtures/
 .DS_Store
 *.png
+AGENTS.md
+.uv-cache

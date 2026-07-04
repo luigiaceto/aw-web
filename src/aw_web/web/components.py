@@ -30,12 +30,15 @@ def page(title: str, body: str) -> bytes:
     <body>
       <header class="topbar">
         <nav class="main-nav" aria-label="Navigazione principale">
-          <a class="brand" href="/">aw-web</a>
+          <a class="brand" href="/"><span class="brand-mark">aw</span><span>web</span></a>
+          <a class="nav-link" href="/">Home</a>
           <a class="nav-link" href="/stagionali">Stagionali</a>
+          <a class="nav-link" href="/popolari">Popolari</a>
+          <a class="nav-link" href="/top-100">Top 100</a>
         </nav>
         <form class="search" action="/search" method="get">
           <input type="search" name="q" placeholder="Cerca anime..." autocomplete="off" required>
-          <button>Cerca</button>
+          <button aria-label="Cerca">{_search_icon()}<span class="button-text">Cerca</span></button>
         </form>
       </header>
       <main>{body}</main>
@@ -52,6 +55,99 @@ def image_html(url: str, alt: str) -> str:
     return f'<div class="cover placeholder"><span>{esc(initials)}</span></div>'
 
 
+def _decorative_card_image(image: str) -> str:
+    if image.startswith('<img class="cover" '):
+        return image.replace('alt="', 'aria-hidden="true" alt="', 1)
+    return image
+
+
+def _short_text(value: str, *, limit: int = 190) -> str:
+    clean = " ".join(value.split())
+    if len(clean) <= limit:
+        return clean
+    return clean[: limit - 1].rsplit(" ", 1)[0] + "..."
+
+
+def _anime_description(anime: Anime) -> str:
+    return _short_text(str(anime.info.get("Trama", "")))
+
+
+def _meta_text(parts: list[str]) -> str:
+    return " | ".join(part for part in parts if part)
+
+
+def _pill(label: str, class_name: str = "") -> str:
+    classes = f"badge {class_name}".strip()
+    return f'<span class="{classes}">{esc(label)}</span>'
+
+
+def _link_action(href: str, label: str, icon: str = "") -> str:
+    return f'<a class="button secondary card-action" href="{esc(href)}">{icon}<span>{esc(label)}</span></a>'
+
+
+def _remove_form(action: str, item_id: object, label: str) -> str:
+    return f"""
+    <form action="{esc(action)}" method="post">
+      {csrf_input()}
+      <input type="hidden" name="id" value="{esc(item_id)}">
+      <button class="secondary danger card-icon-action" type="submit" aria-label="{esc(label)}" title="{esc(label)}">
+        {_trash_icon()}
+      </button>
+    </form>
+    """
+
+
+def _play_form_action(provider_name: str, anime: Anime, episode_num: str, label: str) -> str:
+    return f"""
+    <form action="/play" method="post">
+      {csrf_input()}
+      <input type="hidden" name="provider" value="{esc(provider_name)}">
+      <input type="hidden" name="anime" value="{esc(anime_to_json(anime))}">
+      <input type="hidden" name="episode" value="{esc(episode_num)}">
+      <button class="card-action play-action" type="submit">{_play_icon()}<span>{esc(label)}</span></button>
+    </form>
+    """
+
+
+def _catalog_card(
+    *,
+    title: str,
+    href: str,
+    image: str,
+    badges: list[str],
+    meta: str,
+    description: str = "",
+    actions: str = "",
+    class_name: str = "",
+) -> str:
+    badge_html = "".join(_pill(badge) for badge in badges if badge)
+    description_html = (
+        f'<p class="hover-description">{esc(description)}</p>'
+        if description
+        else '<p class="hover-description muted">Apri la scheda per maggiori dettagli.</p>'
+    )
+    return f"""
+    <article class="catalog-card {esc(class_name)}">
+      <a class="card-detail-link" href="{esc(href)}" aria-label="{esc(title)}"></a>
+      <div class="card-backdrop" aria-hidden="true">{_decorative_card_image(image)}</div>
+      <div class="poster-frame">{image}</div>
+      <div class="card-info">
+        <div class="badge-row">{badge_html}</div>
+        <h3>{esc(title)}</h3>
+      </div>
+      <div class="card-hover">
+        <div class="hover-copy">
+          <div class="badge-row">{badge_html}</div>
+          <h3>{esc(title)}</h3>
+          <p class="hover-meta">{esc(meta) if meta else 'Scheda anime'}</p>
+          {description_html}
+        </div>
+        {f'<div class="hover-actions">{actions}</div>' if actions else ''}
+      </div>
+    </article>
+    """
+
+
 def card(anime: Anime, provider_name: str, badge: str = "") -> str:
     cover = get_cover(anime.anilist_id, anime.name, allow_title_lookup=False)
     image = image_html(cover["cover_url"], anime.name)
@@ -64,16 +160,18 @@ def card(anime: Anime, provider_name: str, badge: str = "") -> str:
         info.append(f"Ep. {esc(anime.curr_ep)}")
     if anime.status.value != "Sconosciuto":
         info.append(esc(anime.status.value))
-    return f"""
-    <a class="card" href="{href}">
-      {image}
-      <div class="card-body">
-        {f'<span class="badge">{esc(badge)}</span>' if badge else ''}
-        <h3>{esc(anime.name)}</h3>
-        <p>{' &middot; '.join(info) or 'Apri dettagli'}</p>
-      </div>
-    </a>
-    """
+    actions = ""
+    if badge == "Nuovo" and anime.curr_ep and anime.curr_ep != "0":
+        actions = _play_form_action(provider_name, anime, anime.curr_ep, f"Guarda episodio {anime.curr_ep}")
+    return _catalog_card(
+        title=anime.name,
+        href=href,
+        image=image,
+        badges=[badge] if badge else [],
+        meta=_meta_text(info),
+        description=_anime_description(anime),
+        actions=actions,
+    )
 
 
 def seasonal_card(item: Any, year: int, season: str) -> str:
@@ -89,16 +187,34 @@ def seasonal_card(item: Any, year: int, season: str) -> str:
         f"/stagionali/apri?year={q(year)}&season={q(season)}"
         f"&anilist_id={q(item.anilist_id)}"
     )
-    return f"""
-    <a class="card seasonal-card" href="{href}">
-      {image_html(item.cover_url, item.title)}
-      <div class="card-body">
-        <span class="badge">Stagionale</span>
-        <h3>{esc(item.title)}</h3>
-        <p>{' &middot; '.join(meta) or 'Apri nel provider'}</p>
-      </div>
-    </a>
-    """
+    return _catalog_card(
+        title=item.title,
+        href=href,
+        image=image_html(item.cover_url, item.title),
+        badges=["Stagionale"],
+        meta=_meta_text(meta),
+        class_name="seasonal-card",
+    )
+
+
+def anilist_card(item: Any, source: str, badge: str) -> str:
+    genres = ", ".join(item.genres)
+    meta = []
+    if genres:
+        meta.append(esc(genres))
+    if item.episodes:
+        meta.append(f"{esc(item.episodes)} ep.")
+    if item.average_score:
+        meta.append(f"Voto AniList {esc(item.average_score)}%")
+    href = f"/anilist/apri?source={q(source)}&anilist_id={q(item.anilist_id)}"
+    return _catalog_card(
+        title=item.title,
+        href=href,
+        image=image_html(item.cover_url, item.title),
+        badges=[badge],
+        meta=_meta_text(meta),
+        class_name="seasonal-card anilist-card",
+    )
 
 
 def provider_match_card(anime: Anime, provider_name: str) -> str:
@@ -107,16 +223,14 @@ def provider_match_card(anime: Anime, provider_name: str) -> str:
         f"/anime?provider={q(provider_name)}&name={q(anime.name)}&ref={q(anime.ref)}"
         f"&curr_ep={q(anime.curr_ep)}&last_ep={q(anime.last_ep)}&anilist_id={q(anime.anilist_id)}"
     )
-    return f"""
-    <a class="card" href="{href}">
-      {image_html(cover["cover_url"], anime.name)}
-      <div class="card-body">
-        <span class="badge">{esc(provider_name)}</span>
-        <h3>{esc(anime.name)}</h3>
-        <p>Ep. {esc(anime.curr_ep or '0')} / {esc(anime.last_ep or '0')}</p>
-      </div>
-    </a>
-    """
+    return _catalog_card(
+        title=anime.name,
+        href=href,
+        image=image_html(cover["cover_url"], anime.name),
+        badges=[provider_name],
+        meta=f"Ep. {anime.curr_ep or '0'} / {anime.last_ep or '0'}",
+        description=_anime_description(anime),
+    )
 
 
 def play_form(provider_name: str, anime: Anime, episode_num: str, label: str) -> str:
@@ -157,6 +271,32 @@ def collection_toggle(
     """
 
 
+def _play_icon() -> str:
+    return """
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M8 5.5v13l11-6.5-11-6.5Z" fill="currentColor"/>
+    </svg>
+    """
+
+
+def _trash_icon() -> str:
+    return """
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M9 3h6l1 2h4v2H4V5h4l1-2Z" fill="currentColor"/>
+      <path d="M6.5 9h11l-.7 10.2A2 2 0 0 1 14.8 21H9.2a2 2 0 0 1-2-1.8L6.5 9Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+    </svg>
+    """
+
+
+def _search_icon() -> str:
+    return """
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <circle cx="11" cy="11" r="6.5" fill="none" stroke="currentColor" stroke-width="2"/>
+      <path d="m16 16 4 4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+    </svg>
+    """
+
+
 def _bookmark_icon(active: bool) -> str:
     fill = "currentColor" if active else "none"
     return f"""
@@ -183,22 +323,21 @@ def favorite_card(item: dict[str, Any]) -> str:
         f"/anime?provider={q(item['provider'])}&name={q(anime.name)}&ref={q(anime.ref)}"
         f"&curr_ep={q(anime.curr_ep)}&last_ep={q(anime.last_ep)}&anilist_id={q(anime.anilist_id)}"
     )
-    return f"""
-    <article class="card saved-card">
-      <a href="{href}">{image_html(cover_url, str(item['name']))}</a>
-      <div class="card-body">
-        <span class="badge">Preferito</span>
-        <h3><a href="{href}">{esc(item['name'])}</a></h3>
-        <div class="row-actions">
-          <form action="/favorites/remove" method="post">
-            {csrf_input()}
-            <input type="hidden" name="id" value="{esc(item['id'])}">
-            <button class="secondary danger">Rimuovi</button>
-          </form>
-        </div>
-      </div>
-    </article>
-    """
+    meta = _meta_text([
+        str(item.get("status") or ""),
+        f"Ep. {item.get('current_episode') or anime.curr_ep or '0'} / {item.get('last_episode') or anime.last_ep or '0'}",
+    ])
+    actions = _remove_form("/favorites/remove", item["id"], "Rimuovi dai preferiti")
+    return _catalog_card(
+        title=str(item["name"]),
+        href=href,
+        image=image_html(cover_url, str(item["name"])),
+        badges=["Preferito"],
+        meta=meta,
+        description=_anime_description(anime),
+        actions=actions,
+        class_name="saved-card favorite-card",
+    )
 
 
 def watch_card(item: dict[str, Any], latest: list[Anime]) -> str:
@@ -211,30 +350,27 @@ def watch_card(item: dict[str, Any], latest: list[Anime]) -> str:
     last_episode = available_last_episode(item, latest)
     playable_episode = next_playable_episode(item, latest)
     play_label = "Inizia" if current_episode == "0" else "Riprendi"
-    return f"""
-    <article class="card saved-card">
-      <a href="{href}">{image_html(cover_url, str(item['name']))}</a>
-      <div class="card-body">
-        <span class="badge">Watchlist</span>{new_episode_badge}
-        <h3><a href="{href}">{esc(item['name'])}</a></h3>
-        <p>Sei arrivato all'episodio <strong>{esc(current_episode)}</strong> / {esc(last_episode)}</p>
-        <div class="row-actions">
-          <form action="/play" method="post">
-            {csrf_input()}
-            <input type="hidden" name="provider" value="{esc(str(item['provider']))}">
-            <input type="hidden" name="anime" value="{esc(anime_to_json(anime))}">
-            <input type="hidden" name="episode" value="{esc(playable_episode)}">
-            <button>{esc(play_label)}</button>
-          </form>
-          <form action="/watchlist/remove" method="post">
-            {csrf_input()}
-            <input type="hidden" name="id" value="{esc(item['id'])}">
-            <button class="secondary danger">Rimuovi</button>
-          </form>
-        </div>
-      </div>
-    </article>
-    """
+    meta = _meta_text([
+        f"Ep. {current_episode} / {last_episode}",
+        str(item.get("status") or ""),
+    ])
+    actions = (
+        _play_form_action(str(item["provider"]), anime, playable_episode, play_label)
+        + _remove_form("/watchlist/remove", item["id"], "Rimuovi dalla watchlist")
+    )
+    return _catalog_card(
+        title=str(item["name"]),
+        href=href,
+        image=image_html(cover_url, str(item["name"])),
+        badges=["Watchlist"],
+        meta=meta,
+        description=_anime_description(anime),
+        actions=actions,
+        class_name="saved-card watch-card",
+    ).replace(
+        '<div class="badge-row"><span class="badge">Watchlist</span></div>',
+        f'<div class="badge-row"><span class="badge">Watchlist</span>{new_episode_badge}</div>',
+    )
 
 
 def episode_row(provider_name: str, anime: Anime, episode: Anime.Episode, current_episode: str) -> str:

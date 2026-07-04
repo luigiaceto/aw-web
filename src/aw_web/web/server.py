@@ -22,6 +22,8 @@ from aw_web.web.state import CSRF_TOKEN, HOST, PORT
 from aw_web.web.utils import anime_from_json, esc, q
 from aw_web.web.views import (
     redirect,
+    render_anilist_open,
+    render_anilist_ranking,
     render_anime,
     render_home,
     render_search,
@@ -111,6 +113,12 @@ class WebHandler(BaseHTTPRequestHandler):
             self.respond(render_seasonal(params))
         elif parsed.path == "/stagionali/apri":
             self.respond(render_seasonal_open(params))
+        elif parsed.path == "/popolari":
+            self.respond(render_anilist_ranking("popolari"))
+        elif parsed.path == "/top-100":
+            self.respond(render_anilist_ranking("top-100"))
+        elif parsed.path == "/anilist/apri":
+            self.respond(render_anilist_open(params))
         elif parsed.path == "/favicon.ico":
             self.respond_favicon()
         elif parsed.path == "/set-provider":

@@ -5,6 +5,7 @@ from aw_web.services.anilist import (
     SeasonalAnime,
     adjacent_season,
     current_season,
+    ranked_anime,
     seasonal_anime,
     seasonal_label,
 )
@@ -80,6 +81,54 @@ def test_seasonal_anime_fetches_all_anilist_pages(monkeypatch):
     assert calls == [1, 2]
     assert [item.anilist_id for item in items] == [1, 2]
     seasonal_anime.cache_clear()
+
+
+def test_ranked_anime_uses_expected_anilist_sort(monkeypatch):
+    calls = []
+
+    class FakeResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {
+                "data": {
+                    "Page": {
+                        "pageInfo": {"hasNextPage": False},
+                        "media": [
+                            {
+                                "id": 123,
+                                "title": {"english": "Ranked Anime", "romaji": "", "native": ""},
+                                "synonyms": [],
+                                "coverImage": {},
+                                "bannerImage": "",
+                                "status": "FINISHED",
+                                "episodes": 12,
+                                "genres": ["Action"],
+                                "averageScore": 90,
+                                "isAdult": False,
+                            }
+                        ],
+                    }
+                }
+            }
+
+    def fake_post(url, *, json, timeout):
+        calls.append(json["variables"])
+        return FakeResponse()
+
+    ranked_anime.cache_clear()
+    monkeypatch.setattr("aw_web.services.anilist.httpx.post", fake_post)
+
+    popular = ranked_anime("popolari")
+    ranked_anime.cache_clear()
+    top = ranked_anime("top-100")
+
+    assert calls[0]["sort"] == ["TRENDING_DESC"]
+    assert calls[1]["sort"] == ["SCORE_DESC"]
+    assert popular[0].title == "Ranked Anime"
+    assert top[0].average_score == 90
+    ranked_anime.cache_clear()
 
 
 def test_best_seasonal_match_uses_anilist_id(monkeypatch):

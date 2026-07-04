@@ -12,20 +12,20 @@ repos:
     hooks:
       - id: pyright
         name: pyright
-        entry: uv run pyright
+        entry: uv run --locked pyright
         language: system
-        types: [python]
-
+        pass_filenames: false
+        always_run: true
 
   # Hook per pytest (esegue i test)
   - repo: local
     hooks:
       - id: pytest
         name: pytest
-        entry: uv run pytest # Esegue pytest usando l'ambiente gestito da uv
+        entry: uv run --locked pytest # Esegue pytest usando l'ambiente gestito da uv
         language: system
-        types: [python]
         pass_filenames: false # Esegue tutti i test, non solo i file modificati
+        always_run: true
 
   # Hook opzionale per mantenere uv.lock aggiornato
   - repo: https://github.com/astral-sh/uv-pre-commit

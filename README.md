@@ -1,10 +1,10 @@
 # aw-web
 
-Interfaccia web locale per navigare e guardare anime senza pubblicità o pop-up. Include funzionalità come: ricerca anime, ultimi episodi, watchlist, preferiti, anime stagionali.
+![alt text](img/home.png)
 
-<img width="1393" height="878" alt="Screenshot 2026-07-01 alle 15 35 44" src="https://github.com/user-attachments/assets/ac815b87-c940-401d-b2bb-99fa778181ce" />
+![alt text](img/lists.png)
 
-<img width="1395" height="877" alt="Screenshot 2026-07-01 alle 15 35 54" src="https://github.com/user-attachments/assets/711fb998-574a-437c-ae14-8bcfd959fc3c" />
+![alt text](img/seasonal.png)
 
 ## Indice
 
@@ -132,10 +132,5 @@ Quando clicchi `Guarda`, la WebApp risolve il link dell'episodio e apre MPV dire
 aw-web -> MPV -> server video
 ```
 
-Se MPV non viene trovato automaticamente, puoi indicare il percorso dell'eseguibile con:
-
-```bash
-AW_WEB_MPV_PATH=/percorso/a/mpv aw-web
-```
-
-Su macOS installato con Homebrew, aw-web controlla anche `/opt/homebrew/bin/mpv` e `/usr/local/bin/mpv`.
+> [!CAUTION]
+> Se nel corso dell'installazione, aggiornamento ed utilizzo dell'applicazione si dovessero riscontrare problemi o bug inerenti ad aw-web si prega di aprire una issue in modo da dare la possibilità allo sviluppatore di aiutare con la risoluzione e applicare l'eventuale bug fix al progetto.

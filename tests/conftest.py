@@ -1,6 +1,7 @@
-import os
 import time
 import json
+import warnings
+
 import pytest
 from pathlib import Path
 from aw_web.providers.animeunity import Animeunity
@@ -73,20 +74,37 @@ def ensure_fixtures(request):
             if now - file_mtime > DEPRECATION_PERIOD_SECONDS:
                 deprecated = True
 
-    if force_update or missing or deprecated:
-        if force_update:
-            reason = "richiesta forzata tramite --update-fixtures"
-        else:
-            reason = "mancanti" if missing else "deprecate (più vecchie di 7 giorni)"
-
-        import warnings
+    if force_update:
         warnings.warn(
-            UserWarning(f"\n[Pytest] Le fixtures sono {reason}. Avvio autorigenerazione...")
+            UserWarning("\n[Pytest] Rigenerazione fixtures richiesta tramite --update-fixtures.")
         )
         try:
             update_fixtures()
         except Exception as e:
             warnings.warn(UserWarning(f"Errore durante l'aggiornamento delle fixtures: {e}"))
+        return
+
+    if missing:
+        pytest.fail(
+            "Fixture AnimeUnity mancanti. Esegui pytest con --update-fixtures per rigenerarle.",
+            pytrace=False,
+        )
+
+    if deprecated:
+        warnings.warn(
+            UserWarning(
+                "\n[Pytest] Le fixtures AnimeUnity sono deprecate (più vecchie di 7 giorni). "
+                "Continuo a usare quelle locali; esegui pytest con --update-fixtures per aggiornarle."
+            )
+        )
+
+
+@pytest.fixture(autouse=True)
+def isolate_default_home(monkeypatch, tmp_path):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    from aw_web.web import state
+
+    state.reset_lazy_database()
 
 
 if __name__ == "__main__":

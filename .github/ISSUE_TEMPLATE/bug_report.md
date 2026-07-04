@@ -22,13 +22,9 @@ Esempio:
 
 ### Versione di aw-web
 
-Esegui:
+Indica come hai installato/aggiornato l'app e, se possibile, il commit o tag usato.
 
-```bash
-aw-web
-```
-
-Output:
+Tag/commit:
 
 ```text
 ...
@@ -36,7 +32,7 @@ Output:
 
 ### Sistema operativo
 
-Esempio: Fedora 40, Ubuntu 24.04, Arch Linux, macOS, Android, Windows WSL, ecc.
+Esempio: macOS 15.5 su Apple Silicon.
 
 ```text
 ...
@@ -52,13 +48,23 @@ Esempio: Fedora 40, Ubuntu 24.04, Arch Linux, macOS, Android, Windows WSL, ecc.
 
 ### Provider
 
-- [ ] AnimeWorld
 - [ ] AnimeUnity
 
 ### Player
 
 - [ ] mpv
-- [ ] vlc
+
+Versione di mpv:
+
+```bash
+mpv --version
+```
+
+Output:
+
+```text
+...
+```
 
 ## Log / output del terminale
 
