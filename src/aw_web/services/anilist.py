@@ -289,6 +289,7 @@ def cover_cache_key(anilist_id: int, title: str) -> str:
 
 
 def get_cover(anilist_id: int, title: str, *, allow_title_lookup: bool = True) -> dict[str, str]:
+    empty_cover = {"cover_url": "", "banner_url": "", "color": ""}
     key = cover_cache_key(anilist_id, title)
     cached = DB.get_cover(key)
     if cached:
@@ -335,7 +336,7 @@ def get_cover(anilist_id: int, title: str, *, allow_title_lookup: bool = True) -
         response.raise_for_status()
         media = response.json().get("data", {}).get("Media") or {}
     except Exception:
-        media = {}
+        return empty_cover
 
     media_title = media.get("title") or {}
     cover = media.get("coverImage") or {}
@@ -348,6 +349,9 @@ def get_cover(anilist_id: int, title: str, *, allow_title_lookup: bool = True) -
         "banner_url": str(media.get("bannerImage") or ""),
         "color": str(cover.get("color") or ""),
     }
+    if not result["cover_url"]:
+        return result
+
     DB.set_cover(
         cache_key=key,
         anilist_id=resolved_id,

@@ -5,11 +5,13 @@ from aw_web.services.anilist import (
     SeasonalAnime,
     adjacent_season,
     current_season,
+    get_cover,
     ranked_anime,
     seasonal_anime,
     seasonal_label,
 )
 from aw_web.services.matching import best_seasonal_match
+from aw_web.web.db import WebDatabase
 
 
 def test_current_season_from_date():
@@ -129,6 +131,127 @@ def test_ranked_anime_uses_expected_anilist_sort(monkeypatch):
     assert popular[0].title == "Ranked Anime"
     assert top[0].average_score == 90
     ranked_anime.cache_clear()
+
+
+def test_get_cover_does_not_cache_http_errors(monkeypatch, tmp_path):
+    db = WebDatabase(tmp_path / "web.sqlite3")
+
+    class FakeResponse:
+        def raise_for_status(self):
+            raise RuntimeError("403 Forbidden")
+
+    def fake_post(url, *, json, timeout):
+        return FakeResponse()
+
+    monkeypatch.setattr("aw_web.services.anilist.DB", db)
+    monkeypatch.setattr("aw_web.services.anilist.httpx.post", fake_post)
+
+    cover = get_cover(123, "Blocked Anime")
+
+    assert cover == {"cover_url": "", "banner_url": "", "color": ""}
+    assert db.get_cover("anilist:123") is None
+
+
+def test_get_cover_does_not_cache_missing_cover_image(monkeypatch, tmp_path):
+    db = WebDatabase(tmp_path / "web.sqlite3")
+
+    class FakeResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {
+                "data": {
+                    "Media": {
+                        "id": 123,
+                        "title": {"english": "No Cover", "romaji": "", "native": ""},
+                        "coverImage": {},
+                        "bannerImage": "https://img.example/banner.jpg",
+                    }
+                }
+            }
+
+    def fake_post(url, *, json, timeout):
+        return FakeResponse()
+
+    monkeypatch.setattr("aw_web.services.anilist.DB", db)
+    monkeypatch.setattr("aw_web.services.anilist.httpx.post", fake_post)
+
+    cover = get_cover(123, "No Cover")
+
+    assert cover == {
+        "cover_url": "",
+        "banner_url": "https://img.example/banner.jpg",
+        "color": "",
+    }
+    assert db.get_cover("anilist:123") is None
+
+
+def test_get_cover_caches_valid_anilist_response(monkeypatch, tmp_path):
+    db = WebDatabase(tmp_path / "web.sqlite3")
+
+    class FakeResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {
+                "data": {
+                    "Media": {
+                        "id": 123,
+                        "title": {"english": "Covered", "romaji": "", "native": ""},
+                        "coverImage": {
+                            "large": "https://img.example/large.jpg",
+                            "extraLarge": "https://img.example/extra.jpg",
+                            "color": "#abcdef",
+                        },
+                        "bannerImage": "https://img.example/banner.jpg",
+                    }
+                }
+            }
+
+    def fake_post(url, *, json, timeout):
+        return FakeResponse()
+
+    monkeypatch.setattr("aw_web.services.anilist.DB", db)
+    monkeypatch.setattr("aw_web.services.anilist.httpx.post", fake_post)
+
+    cover = get_cover(123, "Covered")
+    cached = db.get_cover("anilist:123")
+
+    assert cover == {
+        "cover_url": "https://img.example/extra.jpg",
+        "banner_url": "https://img.example/banner.jpg",
+        "color": "#abcdef",
+    }
+    assert cached is not None
+    assert cached["cover_url"] == "https://img.example/extra.jpg"
+
+
+def test_get_cover_uses_valid_cache_without_http(monkeypatch, tmp_path):
+    db = WebDatabase(tmp_path / "web.sqlite3")
+    db.set_cover(
+        cache_key="anilist:123",
+        anilist_id=123,
+        title="Cached",
+        cover_url="https://img.example/cached.jpg",
+        banner_url="https://img.example/cached-banner.jpg",
+        color="#123456",
+    )
+
+    def fake_post(url, *, json, timeout):
+        raise AssertionError("AniList should not be called for cached covers")
+
+    monkeypatch.setattr("aw_web.services.anilist.DB", db)
+    monkeypatch.setattr("aw_web.services.anilist.httpx.post", fake_post)
+
+    cover = get_cover(123, "Cached")
+
+    assert cover == {
+        "cover_url": "https://img.example/cached.jpg",
+        "banner_url": "https://img.example/cached-banner.jpg",
+        "color": "#123456",
+    }
 
 
 def test_best_seasonal_match_uses_anilist_id(monkeypatch):

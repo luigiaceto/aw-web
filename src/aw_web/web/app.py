@@ -54,7 +54,7 @@ def main(argv: Sequence[str] | None = None) -> None:
 
     ensure_config()
     db_result = prepare_database(default_db_path())
-    print(f"Database watchlist: {db_result.path}")
+    print(f"Database locale: {db_result.path}")
     if db_result.created:
         print("Database creato correttamente")
     if db_result.valid:

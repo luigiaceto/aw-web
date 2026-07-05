@@ -10,8 +10,7 @@
 
 - [Installazione](#installazione-su-macos-unico-os-supportato-e-testato-attualmente)
 - [Avvio](#avvio)
-- [Utilizzo](#utilizzo)
-- [Anime Stagionali](#anime-stagionali)
+- [Features](#features)
 - [Watchlist, Preferiti e Database](#watchlist-preferiti-e-database)
 - [Player MPV](#player-mpv)
 
@@ -71,12 +70,12 @@ Per aggiornare `aw-web` all'ultima versione della repository, eseguire il comand
 uv tool install --force --managed-python --python 3.13 git+https://github.com/luigiaceto/aw-web.git
 ```
 
-## Utilizzo
+## Features
 
 Dalla home dell'app puoi:
 
 - vedere gli ultimi episodi usciti;
-- aprire la pagina degli anime stagionali;
+- consultare gli anime stagionali, popolari e la top-100, tutto grazie ad AniList;
 - cercare anime;
 - aprire la pagina dettaglio di un anime;
 - vedere la tua watchlist;
@@ -84,25 +83,16 @@ Dalla home dell'app puoi:
 - vedere a che episodio eri arrivato;
 - vedere il badge `Nuovo episodio` quando esiste un episodio successivo all'ultimo visto.
 
-Nella pagina anime puoi:
+> [!NOTE]
+> aw-web si appoggia ad AniList per poter recuperare le copertine, banner, liste, stagioni di ogni anime, dunque se si hanno problemi nell'accedere alle pagine STAGIONALI, POPOLARI, TOP-100 con errore HTTP 403 è probabile che la causa derivi proprio da AniList che potrebbe aver temporaneamente sospeso il servizio.
+
+Nella pagina di un anime puoi:
 
 - leggere info e trama;
 - vedere la copertina recuperata da AniList;
 - aggiungere o rimuovere l'anime dalla watchlist con il pulsante segnalibro;
 - aggiungere o rimuovere l'anime dai preferiti con il pulsante cuore;
-- scegliere un episodio;
-- aprirlo in MPV.
-
-## Anime Stagionali
-
-Dal pulsante `Stagionali` nella barra in alto puoi accedere alla pagina dedicata agli anime stagionali per rimanere aggiornati.
-
-In questa pagina puoi:
-
-- scegliere anno e stagione;
-- usare le frecce per andare alla stagione precedente o successiva;
-- vedere copertina, generi, numero di episodi e `Voto AniList`;
-- cliccare un anime per cercarlo su AnimeUnity e aprirlo nella normale pagina dettaglio di `aw-web`.
+- scegliere un episodio ed aprirlo in MPV.
 
 ## Watchlist, Preferiti e Database
 
@@ -113,24 +103,21 @@ Watchlist, preferiti e cache delle copertine degli anime vengono salvati in un d
 ```
 
 > [!IMPORTANT]
-> Il progetto è ancora in fase di sviluppo, dunque potrebbe essere possibile, durante un aggiornamento, che venga cambiata la firma del database (colonne usate). Dunque può accadere che il database diventi invalido per la nuova versione dell'app, ne segue che occorre resettarlo. Per fare ciò, chiudere l'app ed eseguire nel terminale:
+> Il progetto è ancora in fase di sviluppo, dunque potrebbe essere possibile, durante un aggiornamento, che venga cambiata la firma del database (colonne). Dunque può accadere che il database diventi invalido per la nuova versione dell'app, ne segue che occorre resettarlo. Per fare ciò, chiudere l'app ed eseguire nel terminale:
 >
 > ```bash
 > aw-web --reset-db
 > ```
 >
-> Al prossimo avvio dell'app verrà dunque ricreato il database nuovo ma perderete tutti i vostri progressi (watchlist e preferiti). Lo sviluppatore si impegna a minimizzare i cambi al database.
+> Al prossimo avvio dell'app verrà dunque ricreato il database ma perderete tutti i vostri progressi (watchlist e preferiti). Lo sviluppatore si impegna a minimizzare i cambiamenti apportati al database.
 > Si consiglia quindi di non fare affidamente esclusivamente su quest'app per tenere traccia della propria watchlist.
 
 ## Player MPV
 
-`aw-web` usa il browser come interfaccia e MPV come player video.
+`aw-web` usa il browser come interfaccia di navigazione e MPV come player video.
 
-Quando clicchi `Guarda`, la WebApp risolve il link dell'episodio e apre MPV direttamente:
+Quando clicchi `Guarda`, la WebApp risolve il link dell'episodio e lo apre in MPV.
 
-```text
-aw-web -> MPV -> server video
-```
+## Report di Bug e Problemi Vari
 
-> [!CAUTION]
-> Se nel corso dell'installazione, aggiornamento ed utilizzo dell'applicazione si dovessero riscontrare problemi o bug inerenti ad aw-web si prega di aprire una issue in modo da dare la possibilità allo sviluppatore di aiutare con la risoluzione e applicare l'eventuale bug fix al progetto.
+Se nel corso dell'installazione, aggiornamento ed utilizzo dell'applicazione si dovessero riscontrare problemi o bug inerenti ad aw-web si prega di aprire una GitHub issue in modo da dare la possibilità allo sviluppatore di risolvere il problema e applicare l'eventuale bug fix al progetto.
