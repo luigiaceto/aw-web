@@ -135,6 +135,33 @@ button.secondary:hover, .button.secondary:hover, button.secondary:focus-visible,
 button.danger, .button.danger { color: #fff; border-color: rgba(255, 95, 86, .38); }
 button.danger:hover, .button.danger:hover { background: rgba(255, 95, 86, .16); border-color: var(--danger); }
 .button-text { display: inline; }
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+button.is-loading, button.is-loading:hover, button.is-loading:focus-visible {
+  min-width: var(--loading-button-width, 78px);
+  cursor: progress;
+  background: transparent;
+  border-color: transparent;
+  color: var(--accent);
+  outline: 0;
+}
+.play-spinner {
+  width: 24px;
+  height: 24px;
+  border: 3px solid rgba(143, 209, 79, .24);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: playSpinner .72s linear infinite;
+}
 .hero {
   position: relative;
   display: grid;
@@ -183,6 +210,9 @@ button.danger:hover, .button.danger:hover { background: rgba(255, 95, 86, .16); 
 .hero-slideshow.is-static .hero-slide {
   opacity: 1;
   animation: none;
+}
+@keyframes playSpinner {
+  to { transform: rotate(360deg); }
 }
 .hero-copy { position: relative; z-index: 2; max-width: 600px; }
 .hero h1 {

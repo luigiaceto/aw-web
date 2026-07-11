@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
+import json
 import sys
+import threading
+import time
+import uuid
+from dataclasses import dataclass, field
 from importlib.resources import files
 from http.server import BaseHTTPRequestHandler
 from secrets import compare_digest
@@ -34,6 +39,19 @@ from aw_web.web.views import (
 
 MAX_POST_BYTES = 1024 * 1024
 ALLOWED_ORIGINS = {f"http://{HOST}:{PORT}", f"http://localhost:{PORT}"}
+PLAYBACK_JOB_TIMEOUT_SECONDS = 60.0
+
+
+@dataclass
+class PlaybackJob:
+    redirect: str
+    status: str = "pending"
+    error: str = ""
+    created_at: float = field(default_factory=time.monotonic)
+
+
+PLAYBACK_JOBS: dict[str, PlaybackJob] = {}
+PLAYBACK_JOBS_LOCK = threading.Lock()
 
 
 def favicon_bytes() -> bytes:
@@ -84,12 +102,83 @@ def handle_remove_favorite(fields: dict[str, list[str]]) -> bytes:
 
 
 def handle_play(fields: dict[str, list[str]]) -> bytes:
+    return redirect(play_redirect_url(fields))
+
+
+def play_request(fields: dict[str, list[str]]) -> tuple[str, Anime, str]:
     provider_name = fields.get("provider", [""])[0]
     anime_values = fields.get("anime", ["{}"])
     anime = anime_from_json(anime_values[0])
     episode_num = fields.get("episode", [anime.curr_ep])[0]
+    return provider_name, anime, episode_num
+
+
+def play_redirect_url(fields: dict[str, list[str]]) -> str:
+    provider_name, anime, episode_num = play_request(fields)
     play_episode(provider_name, anime, episode_num)
-    return redirect(anime_redirect_url(provider_name, anime))
+    return anime_redirect_url(provider_name, anime)
+
+
+def handle_play_start(fields: dict[str, list[str]]) -> bytes:
+    provider_name, anime, episode_num = play_request(fields)
+    job_id = uuid.uuid4().hex
+    redirect_url = anime_redirect_url(provider_name, anime)
+    with PLAYBACK_JOBS_LOCK:
+        PLAYBACK_JOBS[job_id] = PlaybackJob(redirect=redirect_url)
+    start_playback_job(job_id, provider_name, anime, episode_num)
+    return json.dumps(
+        {
+            "job_id": job_id,
+            "status_url": f"/play/status?id={q(job_id)}",
+            "redirect": redirect_url,
+        }
+    ).encode("utf-8")
+
+
+def start_playback_job(job_id: str, provider_name: str, anime: Anime, episode_num: str) -> None:
+    thread = threading.Thread(
+        target=run_playback_job,
+        args=(job_id, provider_name, anime, episode_num),
+        daemon=True,
+    )
+    thread.start()
+
+
+def run_playback_job(job_id: str, provider_name: str, anime: Anime, episode_num: str) -> None:
+    try:
+        play_episode(provider_name, anime, episode_num)
+    except Exception as exc:
+        with PLAYBACK_JOBS_LOCK:
+            if job := PLAYBACK_JOBS.get(job_id):
+                job.status = "error"
+                job.error = str(exc)
+        return
+
+    with PLAYBACK_JOBS_LOCK:
+        if job := PLAYBACK_JOBS.get(job_id):
+            job.status = "ready"
+
+
+def handle_play_status(params: dict[str, list[str]]) -> bytes:
+    job_id = params.get("id", [""])[0]
+    with PLAYBACK_JOBS_LOCK:
+        job = PLAYBACK_JOBS.get(job_id)
+        if not job:
+            return json.dumps(
+                {"status": "error", "redirect": "", "error": "Richiesta di riproduzione non trovata."}
+            ).encode("utf-8")
+
+        if job.status == "pending" and time.monotonic() - job.created_at > PLAYBACK_JOB_TIMEOUT_SECONDS:
+            job.status = "error"
+            job.error = "Timeout durante l'apertura di MPV."
+
+        return json.dumps(
+            {
+                "status": job.status,
+                "redirect": job.redirect,
+                "error": job.error,
+            }
+        ).encode("utf-8")
 
 
 class WebHandler(BaseHTTPRequestHandler):
@@ -119,6 +208,8 @@ class WebHandler(BaseHTTPRequestHandler):
             self.respond(render_anilist_ranking("top-100"))
         elif parsed.path == "/anilist/apri":
             self.respond(render_anilist_open(params))
+        elif parsed.path == "/play/status":
+            self.respond_json(handle_play_status(params))
         elif parsed.path == "/favicon.ico":
             self.respond_favicon()
         elif parsed.path == "/set-provider":
@@ -157,6 +248,9 @@ class WebHandler(BaseHTTPRequestHandler):
                 payload = handle_remove_favorite(fields)
             elif parsed.path == "/play":
                 payload = handle_play(fields)
+            elif parsed.path == "/play/start":
+                self.respond_json(handle_play_start(fields))
+                return
             else:
                 self.send_error(404)
                 return
@@ -186,6 +280,13 @@ class WebHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def respond_json(self, body: bytes, status: int = 200) -> None:
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
     def respond_favicon(self, *, head_only: bool = False) -> None:
         try:
             body = favicon_bytes()
@@ -201,4 +302,6 @@ class WebHandler(BaseHTTPRequestHandler):
             self.wfile.write(body)
 
     def log_message(self, format: str, *args: object) -> None:
+        if args and isinstance(args[0], str) and args[0].startswith("GET /play/status"):
+            return
         sys.stderr.write("aw-web: " + format % args + "\n")
