@@ -10,6 +10,7 @@ from functools import lru_cache
 import httpx
 
 from aw_web.web.state import DB
+from aw_web.web.utils import parse_int
 
 
 SEASON_ORDER = ("WINTER", "SPRING", "SUMMER", "FALL")
@@ -33,17 +34,6 @@ RANKED_LISTS = {
         "sort": "SCORE_DESC",
     },
 }
-
-
-def _as_int(value: object, default: int = 0) -> int:
-    if value is None:
-        return default
-    if not isinstance(value, (str, int, float)):
-        return default
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return default
 
 
 @dataclass(frozen=True)
@@ -133,23 +123,7 @@ def seasonal_anime(year: int, season: str) -> tuple[SeasonalAnime, ...]:
       }
     }
     """
-    items: list[SeasonalAnime] = []
-    page = 1
-    while page <= 10:
-        response = httpx.post(
-            "https://graphql.anilist.co",
-            json={"query": query, "variables": {"year": year, "season": season, "page": page}},
-            timeout=12,
-        )
-        response.raise_for_status()
-        page_data = response.json().get("data", {}).get("Page", {}) or {}
-        media = page_data.get("media") or []
-        items.extend(_seasonal_from_media(item) for item in media if not _is_adult_media(item))
-        page_info = page_data.get("pageInfo") or {}
-        if not page_info.get("hasNextPage"):
-            break
-        page += 1
-    return tuple(items)
+    return _fetch_media(query, {"year": year, "season": season}, max_pages=10)
 
 
 def _seasonal_from_media(data: dict[str, object]) -> SeasonalAnime:
@@ -161,7 +135,7 @@ def _seasonal_from_media(data: dict[str, object]) -> SeasonalAnime:
     synonyms_data = data.get("synonyms")
     genres_data = data.get("genres")
     return SeasonalAnime(
-        anilist_id=_as_int(data.get("id")),
+        anilist_id=parse_int(data.get("id")),
         title=title_english or title_romaji or title_native,
         title_romaji=title_romaji,
         title_english=title_english,
@@ -170,10 +144,39 @@ def _seasonal_from_media(data: dict[str, object]) -> SeasonalAnime:
         cover_url=str(cover_data.get("extraLarge") or cover_data.get("large") or "") if isinstance(cover_data, dict) else "",
         banner_url=str(data.get("bannerImage") or ""),
         status=str(data.get("status") or ""),
-        episodes=_as_int(data.get("episodes")),
+        episodes=parse_int(data.get("episodes")),
         genres=tuple(str(item) for item in genres_data[:3]) if isinstance(genres_data, list) else (),
-        average_score=_as_int(data.get("averageScore")),
+        average_score=parse_int(data.get("averageScore")),
     )
+
+
+def _fetch_media(
+    query: str,
+    variables: dict[str, object],
+    *,
+    max_pages: int,
+    limit: int | None = None,
+) -> tuple[SeasonalAnime, ...]:
+    """Esegue la query paginata di AniList e converte i media in SeasonalAnime."""
+    items: list[SeasonalAnime] = []
+    page = 1
+    while page <= max_pages:
+        response = httpx.post(
+            "https://graphql.anilist.co",
+            json={"query": query, "variables": {**variables, "page": page}},
+            timeout=12,
+        )
+        response.raise_for_status()
+        page_data = response.json().get("data", {}).get("Page", {}) or {}
+        media = page_data.get("media") or []
+        items.extend(_seasonal_from_media(item) for item in media if not _is_adult_media(item))
+        if limit is not None and len(items) >= limit:
+            break
+        page_info = page_data.get("pageInfo") or {}
+        if not page_info.get("hasNextPage"):
+            break
+        page += 1
+    return tuple(items[:limit] if limit is not None else items)
 
 
 def _is_adult_media(data: dict[str, object]) -> bool:
@@ -225,23 +228,7 @@ def ranked_anime(slug: str) -> tuple[SeasonalAnime, ...]:
       }
     }
     """
-    items: list[SeasonalAnime] = []
-    page = 1
-    while page <= 2 and len(items) < 100:
-        response = httpx.post(
-            "https://graphql.anilist.co",
-            json={"query": query, "variables": {"page": page, "sort": [sort]}},
-            timeout=12,
-        )
-        response.raise_for_status()
-        page_data = response.json().get("data", {}).get("Page", {}) or {}
-        media = page_data.get("media") or []
-        items.extend(_seasonal_from_media(item) for item in media if not _is_adult_media(item))
-        page_info = page_data.get("pageInfo") or {}
-        if not page_info.get("hasNextPage"):
-            break
-        page += 1
-    return tuple(items[:100])
+    return _fetch_media(query, {"sort": [sort]}, max_pages=2, limit=100)
 
 
 def ranked_by_id(slug: str, anilist_id: int) -> SeasonalAnime | None:

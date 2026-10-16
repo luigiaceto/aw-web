@@ -13,7 +13,6 @@ from ipaddress import ip_address
 from pathlib import Path
 from urllib.parse import urlparse
 
-from aw_web import utilities as ut
 from aw_web.anime import Anime
 from aw_web.services.progress import save_watch_progress
 from aw_web.services.providers import get_provider
@@ -71,10 +70,6 @@ def find_mpv_path() -> str:
     """Find the MPV executable using aw-web's supported lookup order."""
     env_path = os.environ.get("AW_WEB_MPV_PATH", "")
     if env_path and (path := _existing_mpv_path(env_path)):
-        return path
-
-    configured_path = str(ut.config_data.get("player", {}).get("path") or "")
-    if configured_path and (path := _existing_mpv_path(configured_path)):
         return path
 
     if path := shutil.which("mpv"):
@@ -205,7 +200,8 @@ def open_external_player(url: str, title: str) -> None:
         raise RuntimeError(f"Impossibile avviare MPV: {exc}") from exc
     try:
         if ipc_path:
-            _wait_for_mpv_ready(ipc_path, process, url)
+            if not _wait_for_mpv_ready(ipc_path, process, url):
+                raise RuntimeError("MPV è aperto ma il video non è partito: progresso non salvato.")
     finally:
         if ipc_path:
             try:

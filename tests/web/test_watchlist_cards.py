@@ -1,9 +1,10 @@
 import pytest
+from urllib.parse import parse_qs, urlparse
 
 from aw_web.anime import Anime
 from aw_web.services.anilist import SeasonalAnime
 from aw_web.web.components import anilist_card, card, favorite_card, page, seasonal_card, watch_card
-from aw_web.web.utils import anime_to_json, available_last_episode, has_new_episode, next_playable_episode
+from aw_web.web.utils import anime_to_json, anime_url, episode_overview
 
 
 def test_watch_card_uses_latest_episode_for_display():
@@ -24,9 +25,9 @@ def test_watch_card_uses_latest_episode_for_display():
 
     html = watch_card(item, [latest_anime])
 
-    assert has_new_episode(item, [latest_anime])
-    assert available_last_episode(item, [latest_anime]) == "11"
-    assert next_playable_episode(item, [latest_anime]) == "11"
+    last_episode, playable_episode = episode_overview(item, [latest_anime])
+    assert last_episode == "11"
+    assert playable_episode == "11"
     assert "Nuovo episodio" in html
     assert "Ep. 10 / 11" in html
     assert "Sei arrivato all" not in html
@@ -49,7 +50,7 @@ def test_watch_card_resume_keeps_current_episode_when_no_next_exists():
 
     html = watch_card(item, [])
 
-    assert next_playable_episode(item, []) == "12"
+    assert episode_overview(item, [])[1] == "12"
     assert 'name="episode" value="12"' in html
 
 
@@ -73,6 +74,15 @@ def test_watch_card_keeps_play_and_remove_forms():
     assert 'action="/play"' in html
     assert 'name="episode" value="2"' in html
     assert 'action="/watchlist/remove"' in html
+
+
+def test_anime_url_round_trips_special_characters():
+    anime = Anime("Boku & Friends: Test?", "ref&1", curr_ep="2", last_ep="5")
+
+    params = parse_qs(urlparse(anime_url("animeunity", anime)).query)
+
+    assert params["name"] == [anime.name]
+    assert params["ref"] == [anime.ref]
 
 
 def test_watch_card_has_decorative_hover_backdrop():

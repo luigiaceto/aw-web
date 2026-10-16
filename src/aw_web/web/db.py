@@ -28,63 +28,6 @@ class DatabasePreparation:
     errors: tuple[str, ...]
 
 
-EXPECTED_SCHEMA: dict[str, tuple[ColumnSignature, ...]] = {
-    "watchlist": (
-        ColumnSignature("id", "INTEGER", 0, None, 1),
-        ColumnSignature("provider", "TEXT", 1, None, 0),
-        ColumnSignature("name", "TEXT", 1, None, 0),
-        ColumnSignature("ref", "TEXT", 1, None, 0),
-        ColumnSignature("anilist_id", "INTEGER", 1, "0", 0),
-        ColumnSignature("current_episode", "TEXT", 1, "'0'", 0),
-        ColumnSignature("last_episode", "TEXT", 1, "'0'", 0),
-        ColumnSignature("status", "TEXT", 1, "'Sconosciuto'", 0),
-        ColumnSignature("cover_url", "TEXT", 1, "''", 0),
-        ColumnSignature("banner_url", "TEXT", 1, "''", 0),
-        ColumnSignature("anime_json", "TEXT", 1, None, 0),
-        ColumnSignature("episodes_checked_at", "TEXT", 1, "''", 0),
-        ColumnSignature("created_at", "TEXT", 1, "CURRENT_TIMESTAMP", 0),
-        ColumnSignature("updated_at", "TEXT", 1, "CURRENT_TIMESTAMP", 0),
-    ),
-    "cover_cache": (
-        ColumnSignature("cache_key", "TEXT", 0, None, 1),
-        ColumnSignature("anilist_id", "INTEGER", 1, "0", 0),
-        ColumnSignature("title", "TEXT", 1, "''", 0),
-        ColumnSignature("cover_url", "TEXT", 1, "''", 0),
-        ColumnSignature("banner_url", "TEXT", 1, "''", 0),
-        ColumnSignature("color", "TEXT", 1, "''", 0),
-        ColumnSignature("updated_at", "TEXT", 1, "CURRENT_TIMESTAMP", 0),
-    ),
-    "favorites": (
-        ColumnSignature("id", "INTEGER", 0, None, 1),
-        ColumnSignature("provider", "TEXT", 1, None, 0),
-        ColumnSignature("name", "TEXT", 1, None, 0),
-        ColumnSignature("ref", "TEXT", 1, None, 0),
-        ColumnSignature("anilist_id", "INTEGER", 1, "0", 0),
-        ColumnSignature("current_episode", "TEXT", 1, "'0'", 0),
-        ColumnSignature("last_episode", "TEXT", 1, "'0'", 0),
-        ColumnSignature("status", "TEXT", 1, "'Sconosciuto'", 0),
-        ColumnSignature("cover_url", "TEXT", 1, "''", 0),
-        ColumnSignature("banner_url", "TEXT", 1, "''", 0),
-        ColumnSignature("anime_json", "TEXT", 1, None, 0),
-        ColumnSignature("created_at", "TEXT", 1, "CURRENT_TIMESTAMP", 0),
-        ColumnSignature("updated_at", "TEXT", 1, "CURRENT_TIMESTAMP", 0),
-    ),
-    "watch_history": (
-        ColumnSignature("provider", "TEXT", 1, None, 1),
-        ColumnSignature("name", "TEXT", 1, None, 0),
-        ColumnSignature("ref", "TEXT", 1, None, 2),
-        ColumnSignature("anilist_id", "INTEGER", 1, "0", 0),
-        ColumnSignature("current_episode", "TEXT", 1, "'0'", 0),
-        ColumnSignature("last_episode", "TEXT", 1, "'0'", 0),
-        ColumnSignature("status", "TEXT", 1, "'Sconosciuto'", 0),
-        ColumnSignature("cover_url", "TEXT", 1, "''", 0),
-        ColumnSignature("banner_url", "TEXT", 1, "''", 0),
-        ColumnSignature("anime_json", "TEXT", 1, None, 0),
-        ColumnSignature("updated_at", "TEXT", 1, "CURRENT_TIMESTAMP", 0),
-    ),
-}
-
-
 CREATE_TABLE_STATEMENTS = (
     """
     CREATE TABLE IF NOT EXISTS watchlist (
@@ -185,45 +128,81 @@ def validate_database_schema(path: Path) -> list[str]:
     if not path.exists():
         return [f"Database inesistente: {path}"]
 
-    errors: list[str] = []
+    expected = expected_schema()
     try:
         with sqlite3.connect(path) as conn:
             conn.row_factory = sqlite3.Row
-            table_rows = conn.execute(
-                "SELECT name FROM sqlite_master WHERE type = 'table'"
-            ).fetchall()
-            actual_tables = {str(row["name"]) for row in table_rows}
-
-            expected_tables = set(EXPECTED_SCHEMA)
-            missing_tables = sorted(expected_tables - actual_tables)
-            extra_tables = sorted(actual_tables - expected_tables - ALLOWED_INTERNAL_TABLES)
-            errors.extend(f"Tabella mancante: {table}" for table in missing_tables)
-            errors.extend(f"Tabella non prevista: {table}" for table in extra_tables)
-
-            for table in sorted(expected_tables & actual_tables):
-                errors.extend(_validate_table_schema(conn, table, EXPECTED_SCHEMA[table]))
+            actual = _schema_from_connection(conn)
     except sqlite3.DatabaseError as exc:
         return [f"Errore apertura database: {exc}"]
+
+    errors: list[str] = []
+    missing_tables = sorted(set(expected) - set(actual))
+    extra_tables = sorted(set(actual) - set(expected))
+    errors.extend(f"Tabella mancante: {table}" for table in missing_tables)
+    errors.extend(f"Tabella non prevista: {table}" for table in extra_tables)
+
+    for table in sorted(set(expected) & set(actual)):
+        expected_columns, expected_indexes = expected[table]
+        actual_columns, actual_indexes = actual[table]
+        errors.extend(_compare_columns(table, expected_columns, actual_columns))
+        if actual_indexes != expected_indexes:
+            errors.append(
+                f"Indici non validi in {table}: attesi {sorted(expected_indexes)}, trovati {sorted(actual_indexes)}"
+            )
 
     return errors
 
 
-def _validate_table_schema(
+def expected_schema() -> dict[str, tuple[tuple[ColumnSignature, ...], frozenset[tuple[int, tuple[str, ...]]]]]:
+    """Schema atteso ricavato dai CREATE: una sola fonte di verità."""
+    with sqlite3.connect(":memory:") as conn:
+        conn.row_factory = sqlite3.Row
+        create_schema(conn)
+        return _schema_from_connection(conn)
+
+
+def _schema_from_connection(
     conn: sqlite3.Connection,
+) -> dict[str, tuple[tuple[ColumnSignature, ...], frozenset[tuple[int, tuple[str, ...]]]]]:
+    tables = sorted(
+        str(row["name"])
+        for row in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
+        if str(row["name"]) not in ALLOWED_INTERNAL_TABLES
+    )
+    schema = {}
+    for table in tables:
+        columns = tuple(
+            _column_signature(row) for row in conn.execute(f"PRAGMA table_info({table})")
+        )
+        indexes = frozenset(
+            (int(row["unique"]), _index_columns(conn, str(row["name"])))
+            for row in conn.execute(f"PRAGMA index_list({table})")
+            if str(row["origin"]) != "pk"
+        )
+        schema[table] = (columns, indexes)
+    return schema
+
+
+def _column_signature(row: sqlite3.Row) -> ColumnSignature:
+    return ColumnSignature(
+        name=str(row["name"]),
+        type=str(row["type"]),
+        notnull=int(row["notnull"]),
+        default=row["dflt_value"] if row["dflt_value"] is None else str(row["dflt_value"]),
+        pk=int(row["pk"]),
+    )
+
+
+def _index_columns(conn: sqlite3.Connection, index_name: str) -> tuple[str, ...]:
+    return tuple(str(row["name"]) for row in conn.execute(f"PRAGMA index_info({index_name})"))
+
+
+def _compare_columns(
     table: str,
     expected_columns: tuple[ColumnSignature, ...],
+    actual_columns: tuple[ColumnSignature, ...],
 ) -> list[str]:
-    rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
-    actual_columns = tuple(
-        ColumnSignature(
-            name=str(row["name"]),
-            type=str(row["type"]),
-            notnull=int(row["notnull"]),
-            default=row["dflt_value"] if row["dflt_value"] is None else str(row["dflt_value"]),
-            pk=int(row["pk"]),
-        )
-        for row in rows
-    )
     errors: list[str] = []
     expected_names = [column.name for column in expected_columns]
     actual_names = [column.name for column in actual_columns]
@@ -278,7 +257,7 @@ class WebDatabase:
     def favorites(self) -> list[dict[str, Any]]:
         return self._collection("favorites")
 
-    def _find_collection_item(self, table: str, provider: str, ref: str) -> dict[str, Any] | None:
+    def _find_item(self, table: str, provider: str, ref: str) -> dict[str, Any] | None:
         with self.connect() as conn:
             row = conn.execute(
                 f"SELECT * FROM {table} WHERE provider = ? AND ref = ?",
@@ -287,18 +266,13 @@ class WebDatabase:
             return dict(row) if row else None
 
     def find_watch_item(self, provider: str, ref: str) -> dict[str, Any] | None:
-        return self._find_collection_item("watchlist", provider, ref)
+        return self._find_item("watchlist", provider, ref)
 
     def find_favorite_item(self, provider: str, ref: str) -> dict[str, Any] | None:
-        return self._find_collection_item("favorites", provider, ref)
+        return self._find_item("favorites", provider, ref)
 
     def find_history_item(self, provider: str, ref: str) -> dict[str, Any] | None:
-        with self.connect() as conn:
-            row = conn.execute(
-                "SELECT * FROM watch_history WHERE provider = ? AND ref = ?",
-                (provider, ref),
-            ).fetchone()
-            return dict(row) if row else None
+        return self._find_item("watch_history", provider, ref)
 
     def _upsert_collection_item(
         self,
@@ -420,17 +394,6 @@ class WebDatabase:
                 ),
             )
 
-    def update_current_episode(self, provider: str, ref: str, episode: str) -> None:
-        with self.connect() as conn:
-            conn.execute(
-                """
-                UPDATE watchlist
-                SET current_episode = ?, updated_at = CURRENT_TIMESTAMP
-                WHERE provider = ? AND ref = ?
-                """,
-                (episode, provider, ref),
-            )
-
     def update_watch_item_availability(
         self,
         *,
@@ -480,21 +443,21 @@ class WebDatabase:
                 (checked_at, provider, ref),
             )
 
-    def remove_watch_item(self, item_id: int) -> None:
+    def _delete_items(self, table: str, where: str, values: tuple[object, ...]) -> None:
         with self.connect() as conn:
-            conn.execute("DELETE FROM watchlist WHERE id = ?", (item_id,))
+            conn.execute(f"DELETE FROM {table} WHERE {where}", values)
+
+    def remove_watch_item(self, item_id: int) -> None:
+        self._delete_items("watchlist", "id = ?", (item_id,))
 
     def remove_watch_item_by_ref(self, provider: str, ref: str) -> None:
-        with self.connect() as conn:
-            conn.execute("DELETE FROM watchlist WHERE provider = ? AND ref = ?", (provider, ref))
+        self._delete_items("watchlist", "provider = ? AND ref = ?", (provider, ref))
 
     def remove_favorite_item(self, item_id: int) -> None:
-        with self.connect() as conn:
-            conn.execute("DELETE FROM favorites WHERE id = ?", (item_id,))
+        self._delete_items("favorites", "id = ?", (item_id,))
 
     def remove_favorite_item_by_ref(self, provider: str, ref: str) -> None:
-        with self.connect() as conn:
-            conn.execute("DELETE FROM favorites WHERE provider = ? AND ref = ?", (provider, ref))
+        self._delete_items("favorites", "provider = ? AND ref = ?", (provider, ref))
 
     def get_cover(self, cache_key: str) -> dict[str, Any] | None:
         with self.connect() as conn:
@@ -505,13 +468,6 @@ class WebDatabase:
                 conn.execute("DELETE FROM cover_cache WHERE cache_key = ?", (cache_key,))
                 return None
             return dict(row) if row else None
-
-    def prune_cover_cache(self) -> None:
-        with self.connect() as conn:
-            conn.execute(
-                "DELETE FROM cover_cache WHERE updated_at < ?",
-                (self._cover_cache_cutoff(),),
-            )
 
     def _cover_cache_cutoff(self) -> str:
         cutoff = datetime.now(timezone.utc) - timedelta(days=COVER_CACHE_TTL_DAYS)

@@ -51,3 +51,20 @@ def test_anilist_open_redirects_to_provider_match(monkeypatch):
 
     assert payload.decode().startswith("REDIRECT:/anime?provider=animeunity")
     assert "anilist_id=456" in payload.decode()
+
+
+def test_anilist_open_shows_candidates_when_the_match_is_not_sure(monkeypatch):
+    candidate = Anime("Maybe This One", "candidate-ref", curr_ep="0", last_ep="12")
+    monkeypatch.setattr(views, "ranked_by_id", lambda source, anilist_id: _ranked_item())
+    monkeypatch.setattr(views, "best_seasonal_match", lambda provider_name, item: (None, [candidate]))
+    monkeypatch.setattr(
+        "aw_web.web.components.get_cover",
+        lambda anilist_id, title, allow_title_lookup=False: {"cover_url": "", "banner_url": "", "color": ""},
+    )
+
+    html = views.render_anilist_open({"source": ["popolari"], "anilist_id": ["456"]}).decode()
+
+    assert "Risultati possibili" in html
+    assert "Torna a Popolari" in html
+    assert "/anime?provider=animeunity" in html
+    assert "Maybe This One" in html

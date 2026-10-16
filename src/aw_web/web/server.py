@@ -21,10 +21,9 @@ from aw_web.services.collections import (
     toggle_watchlist,
 )
 from aw_web.services.playback import play_episode
-from aw_web.services.providers import set_current_provider
 from aw_web.web.components import page
 from aw_web.web.state import CSRF_TOKEN, HOST, PORT
-from aw_web.web.utils import anime_from_json, esc, q
+from aw_web.web.utils import anime_from_json, anime_url, esc, q
 from aw_web.web.views import (
     redirect,
     render_anilist_open,
@@ -34,12 +33,14 @@ from aw_web.web.views import (
     render_search,
     render_seasonal,
     render_seasonal_open,
+    watchlist_cards_payload,
 )
 
 
 MAX_POST_BYTES = 1024 * 1024
 ALLOWED_ORIGINS = {f"http://{HOST}:{PORT}", f"http://localhost:{PORT}"}
 PLAYBACK_JOB_TIMEOUT_SECONDS = 60.0
+PLAYBACK_JOB_RETENTION_SECONDS = 300.0
 
 
 @dataclass
@@ -58,13 +59,6 @@ def favicon_bytes() -> bytes:
     return files("aw_web.web").joinpath("static/favicon.ico").read_bytes()
 
 
-def anime_redirect_url(provider_name: str, anime: Anime) -> str:
-    return (
-        f"/anime?provider={q(provider_name)}&name={q(anime.name)}&ref={q(anime.ref)}"
-        f"&curr_ep={q(anime.curr_ep)}&last_ep={q(anime.last_ep)}&anilist_id={q(anime.anilist_id)}"
-    )
-
-
 def handle_toggle_watchlist(fields: dict[str, list[str]]) -> bytes:
     provider_name = fields.get("provider", [""])[0]
     anime = anime_from_json(fields.get("anime", ["{}"])[0])
@@ -74,7 +68,7 @@ def handle_toggle_watchlist(fields: dict[str, list[str]]) -> bytes:
         fields.get("cover_url", [""])[0],
         fields.get("banner_url", [""])[0],
     )
-    return redirect(anime_redirect_url(provider_name, anime))
+    return redirect(anime_url(provider_name, anime))
 
 
 def handle_toggle_favorite(fields: dict[str, list[str]]) -> bytes:
@@ -86,7 +80,7 @@ def handle_toggle_favorite(fields: dict[str, list[str]]) -> bytes:
         fields.get("cover_url", [""])[0],
         fields.get("banner_url", [""])[0],
     )
-    return redirect(anime_redirect_url(provider_name, anime))
+    return redirect(anime_url(provider_name, anime))
 
 
 def handle_remove_watchlist(fields: dict[str, list[str]]) -> bytes:
@@ -116,14 +110,20 @@ def play_request(fields: dict[str, list[str]]) -> tuple[str, Anime, str]:
 def play_redirect_url(fields: dict[str, list[str]]) -> str:
     provider_name, anime, episode_num = play_request(fields)
     play_episode(provider_name, anime, episode_num)
-    return anime_redirect_url(provider_name, anime)
+    return anime_url(provider_name, anime)
 
 
 def handle_play_start(fields: dict[str, list[str]]) -> bytes:
     provider_name, anime, episode_num = play_request(fields)
     job_id = uuid.uuid4().hex
-    redirect_url = anime_redirect_url(provider_name, anime)
+    redirect_url = anime_url(provider_name, anime)
     with PLAYBACK_JOBS_LOCK:
+        now = time.monotonic()
+        for old_id in [
+            key for key, job in PLAYBACK_JOBS.items()
+            if now - job.created_at > PLAYBACK_JOB_RETENTION_SECONDS
+        ]:
+            del PLAYBACK_JOBS[old_id]
         PLAYBACK_JOBS[job_id] = PlaybackJob(redirect=redirect_url)
     start_playback_job(job_id, provider_name, anime, episode_num)
     return json.dumps(
@@ -210,10 +210,10 @@ class WebHandler(BaseHTTPRequestHandler):
             self.respond(render_anilist_open(params))
         elif parsed.path == "/play/status":
             self.respond_json(handle_play_status(params))
+        elif parsed.path == "/watchlist/cards":
+            self.respond_json(watchlist_cards_payload())
         elif parsed.path == "/favicon.ico":
             self.respond_favicon()
-        elif parsed.path == "/set-provider":
-            self.send_error(405)
         else:
             self.send_error(404)
 
@@ -226,19 +226,14 @@ class WebHandler(BaseHTTPRequestHandler):
         if length > MAX_POST_BYTES:
             self.send_error(413)
             return
-        raw = self.rfile.read(length).decode("utf-8")
+        raw = self.rfile.read(length).decode("utf-8", errors="replace")
         fields = parse_qs(raw)
         parsed = urlparse(self.path)
         if not self.same_origin() or not self.valid_csrf(fields):
             self.send_error(403)
             return
         try:
-            if parsed.path == "/set-provider":
-                set_current_provider(fields.get("name", [""])[0])
-                self.send_response(204)
-                self.end_headers()
-                return
-            elif parsed.path == "/watchlist/toggle":
+            if parsed.path == "/watchlist/toggle":
                 payload = handle_toggle_watchlist(fields)
             elif parsed.path == "/watchlist/remove":
                 payload = handle_remove_watchlist(fields)

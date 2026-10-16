@@ -7,12 +7,12 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from aw_web import utilities as ut
 from aw_web.anime import Anime
 from aw_web.services import playback
 from aw_web.services.playback import find_mpv_path, open_external_player, validate_media_url
 from aw_web.web import server
 from aw_web.web.components import page, watch_card
+from aw_web.web.db import WebDatabase
 from aw_web.web.server import (
     ALLOWED_ORIGINS,
     WebHandler,
@@ -66,7 +66,6 @@ def test_find_mpv_path_uses_environment_path(monkeypatch, tmp_path):
 
 def test_find_mpv_path_falls_back_to_path(monkeypatch):
     monkeypatch.delenv("AW_WEB_MPV_PATH", raising=False)
-    monkeypatch.setattr(ut, "config_data", {"player": {"path": ""}})
     monkeypatch.setattr("aw_web.services.playback.shutil.which", lambda name: "/usr/bin/mpv")
 
     assert find_mpv_path() == "/usr/bin/mpv"
@@ -74,7 +73,6 @@ def test_find_mpv_path_falls_back_to_path(monkeypatch):
 
 def test_find_mpv_path_returns_empty_when_mpv_is_missing(monkeypatch):
     monkeypatch.delenv("AW_WEB_MPV_PATH", raising=False)
-    monkeypatch.setattr(ut, "config_data", {"player": {"path": ""}})
     monkeypatch.setattr("aw_web.services.playback.shutil.which", lambda name: "")
     monkeypatch.setattr("aw_web.services.playback._HOMEBREW_MPV_PATHS", ())
 
@@ -96,7 +94,7 @@ def test_open_external_player_launches_mpv_without_blocking(monkeypatch):
     monkeypatch.setattr("aw_web.services.playback._mpv_ipc_path", lambda: "/tmp/aw-web-test.sock")
     monkeypatch.setattr(
         "aw_web.services.playback._wait_for_mpv_ready",
-        lambda ipc_path, mpv_process, url: waited.append((ipc_path, mpv_process, url)),
+        lambda ipc_path, mpv_process, url: waited.append((ipc_path, mpv_process, url)) or True,
     )
     monkeypatch.setattr("aw_web.services.playback.os.unlink", lambda path: unlinked.append(path))
     monkeypatch.setattr("aw_web.services.playback.subprocess.Popen", fake_popen)
@@ -122,6 +120,23 @@ def test_mpv_ipc_path_uses_short_tmp_path():
 
     assert path.startswith("/tmp/aw-web-mpv-")
     assert len(path) < 100
+
+
+def test_open_external_player_raises_when_mpv_is_not_ready(monkeypatch):
+    process = MagicMock()
+    process.poll.return_value = None
+    unlinked = []
+
+    monkeypatch.setattr("aw_web.services.playback.find_mpv_path", lambda: "/usr/bin/mpv")
+    monkeypatch.setattr("aw_web.services.playback._mpv_ipc_path", lambda: "/tmp/aw-web-test.sock")
+    monkeypatch.setattr("aw_web.services.playback._wait_for_mpv_ready", lambda *args: False)
+    monkeypatch.setattr("aw_web.services.playback.subprocess.Popen", lambda *args, **kwargs: process)
+    monkeypatch.setattr("aw_web.services.playback.os.unlink", lambda path: unlinked.append(path))
+
+    with pytest.raises(RuntimeError, match="non è partito"):
+        open_external_player("https://cdn.example.com/video.mp4", "Episode 1")
+
+    assert unlinked == ["/tmp/aw-web-test.sock"]
 
 
 @pytest.mark.parametrize(
@@ -384,6 +399,64 @@ def test_post_play_failure_returns_error_page(monkeypatch):
 
     assert captured["status"] == 500
     assert b"MPV non trovato" in captured["body"]
+
+
+def test_get_watchlist_cards_returns_json(monkeypatch):
+    handler = object.__new__(WebHandler)
+    handler.path = "/watchlist/cards"
+    captured = {}
+
+    def fake_respond_json(body, status=200):
+        captured["body"] = body
+        captured["status"] = status
+
+    handler.respond_json = fake_respond_json
+    monkeypatch.setattr(
+        "aw_web.web.server.watchlist_cards_payload",
+        lambda: b'{"refreshing": false, "html": "<p>cards</p>"}',
+    )
+
+    handler.do_GET()
+
+    assert captured == {"body": b'{"refreshing": false, "html": "<p>cards</p>"}', "status": 200}
+
+
+def test_anime_page_saved_does_not_refetch_episodes(monkeypatch, tmp_path):
+    db = WebDatabase(tmp_path / "web.sqlite3")
+    anime = Anime("Saved Anime", "123", curr_ep="1", last_ep="12")
+    anime.update_episodes({"1": "episode-ref"})
+    db.upsert_watch_item(provider="animeunity", anime_data=anime.to_dict(), current_episode="1")
+
+    provider = MagicMock()
+    provider.info_anime.return_value = None
+    monkeypatch.setattr("aw_web.web.views.DB", db)
+    monkeypatch.setattr("aw_web.web.views.get_provider", lambda provider_name: provider)
+    monkeypatch.setattr(
+        "aw_web.web.views.get_cover",
+        lambda anilist_id, title: {"cover_url": "", "banner_url": "", "color": ""},
+    )
+
+    body = render_anime({"provider": ["animeunity"], "saved": ["1"], "ref": ["123"]})
+
+    provider.episodes.assert_not_called()
+    assert b"Ep. 1" in body
+
+
+def test_handle_play_start_prunes_old_jobs(monkeypatch):
+    anime = Anime("Example", "provider-ref", curr_ep="1", last_ep="1")
+    monkeypatch.setattr(server, "PLAYBACK_JOBS", {"old": server.PlaybackJob(redirect="/anime", created_at=0)})
+    monkeypatch.setattr(server, "start_playback_job", lambda *args: None)
+
+    server.handle_play_start(
+        {
+            "provider": ["animeunity"],
+            "anime": [anime_to_json(anime)],
+            "episode": ["1"],
+        }
+    )
+
+    assert "old" not in server.PLAYBACK_JOBS
+    assert len(server.PLAYBACK_JOBS) == 1
 
 
 def test_page_includes_favicon_link():

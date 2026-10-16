@@ -3,19 +3,10 @@
 from __future__ import annotations
 
 from difflib import SequenceMatcher
-from urllib.parse import quote
 
 from aw_web.anime import Anime
 from aw_web.services.anilist import SeasonalAnime
 from aw_web.services.providers import get_provider
-
-
-def seasonal_open_url(provider_name: str, anime: Anime) -> str:
-    return (
-        f"/anime?provider={quote(provider_name, safe='')}&name={quote(anime.name, safe='')}"
-        f"&ref={quote(anime.ref, safe='')}&curr_ep={quote(anime.curr_ep, safe='')}"
-        f"&last_ep={quote(anime.last_ep, safe='')}&anilist_id={quote(str(anime.anilist_id), safe='')}"
-    )
 
 
 def find_seasonal_matches(provider_name: str, seasonal: SeasonalAnime) -> list[Anime]:

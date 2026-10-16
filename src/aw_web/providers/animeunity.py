@@ -77,7 +77,7 @@ class Animeunity(Provider):
         return animes
 
 
-    def _latest(self, filter, specials) -> list[Anime]:
+    def _latest(self, specials) -> list[Anime]:
         regex = re.search(r'<layout-items[^>]*items-json="([^"]*)"', self._session)
         if not regex:
             raise ValueError("Errore nel parsing della pagina principale")
@@ -88,10 +88,6 @@ class Animeunity(Provider):
         for data in json_data:
             result = data['anime']
             title, _, anilist_id, status, info = self._parse_info(result)
-            if filter == "d" and info["Audio"] != "Italiano":
-                continue
-            if filter == "s" and info["Audio"] == "Italiano":
-                continue
             anime = Anime(title, str(result['id']), curr_ep=str(data['number']))
             anime.update_episodes({str(data['number']): str(data['id'])}, specials=specials)
             anime.set_info(anilist_id, status, info)

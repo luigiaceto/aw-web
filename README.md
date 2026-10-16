@@ -109,7 +109,7 @@ Watchlist, preferiti e cache delle copertine degli anime vengono salvati in un d
 > aw-web --reset-db
 > ```
 >
-> Al prossimo avvio dell'app verrà dunque ricreato il database ma perderete tutti i vostri progressi (watchlist e preferiti). Lo sviluppatore si impegna a minimizzare i cambiamenti apportati al database.
+> Al prossimo avvio dell'app verrà dunque ricreato il database. Il file precedente non viene eliminato: viene rinominato in `~/.aw-web/web.sqlite3.bak`, quindi i progressi restano recuperabili a mano. Lo sviluppatore si impegna a minimizzare i cambiamenti apportati alla firma del database.
 > Si consiglia quindi di non fare affidamente esclusivamente su quest'app per tenere traccia della propria watchlist.
 
 ## Player MPV

@@ -84,10 +84,7 @@ pyrightconfig.json
 .history
 .ionide
 
-### Aw-cli
-history.json
-config.toml
-aw-cronologia.csv
+### Dati locali
 *.sqlite
 *.sqlite3
 *.db

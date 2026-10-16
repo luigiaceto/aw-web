@@ -12,55 +12,25 @@ Descrivi chiaramente il problema riscontrato.
 
 ## Passi per riprodurre
 
-Esempio:
-
 1. Esegui `aw-web`
-2. Seleziona ...
+2. ...
 3. Il problema si verifica quando ...
 
 ## Informazioni sull'ambiente
 
-### Versione di aw-web
-
-Indica come hai installato/aggiornato l'app e, se possibile, il commit o tag usato.
-
-Tag/commit:
+Versione di aw-web (indica come l'hai installata/aggiornata, con tag o commit):
 
 ```text
 ...
 ```
 
-### Sistema operativo
-
-Esempio: macOS 15.5 su Apple Silicon.
+Sistema operativo (esempio: macOS 15.5 su Apple Silicon):
 
 ```text
 ...
 ```
 
-### Metodo di installazione
-
-- [ ] `uv`
-- [ ] `pipx`
-- [ ] `pip`
-- [ ] Installazione manuale / da sorgente
-- [ ] Altro (specifica qui)
-
-### Provider
-
-- [ ] AnimeUnity
-
-### Player
-
-- [ ] mpv
-
-Versione di mpv:
-
-```bash
-mpv --version
-```
-
-Output:
+Versione di mpv (`mpv --version`):
 
 ```text
 ...
@@ -70,7 +40,7 @@ Output:
 
 Incolla qui l'output completo dell'errore, se presente.
 
-```
+```text
 ...
 ```
 

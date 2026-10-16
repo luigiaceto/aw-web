@@ -17,6 +17,7 @@ def test_reset_database_removes_sqlite_files(tmp_path, monkeypatch):
     assert not db_path.exists()
     assert not tmp_path.joinpath("web.sqlite3-wal").exists()
     assert not tmp_path.joinpath("web.sqlite3-shm").exists()
+    assert tmp_path.joinpath("web.sqlite3.bak").read_text() == "db"
 
 
 def test_reset_database_can_be_cancelled(tmp_path, monkeypatch):

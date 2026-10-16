@@ -1,7 +1,8 @@
 from abc import ABC, abstractmethod
 from httpx import Client, HTTPError
 from ..anime import Anime
-from .. import utilities as ut
+
+SPECIALS_ENABLED = False  # gli speciali (episodi .5 e 0) restano fuori dalle liste
 
 
 class ProviderError(RuntimeError):
@@ -31,19 +32,23 @@ def error_handler(relink=False):
 
 def update_link(self, callback, anime: Anime, episode: Anime.Episode | None = None):
     """
-    Gestisce il caso in cui il riferimento dell'anime o all'episodio non è più valido
+    Riprova l'operazione quando il riferimento dell'anime o dell'episodio non è più valido.
     """
     if episode:
         self.episodes(anime)
         return callback(self, anime, anime.episode(episode.num))
-    else:
-        res: list[Anime] | None = self.search(anime.name)
-        if not res:
-            raise ProviderError(
-                f"Errore o nessun risultato durante la ricerca di {anime.name} su {self.__class__.__name__}"
-            )
-        anime.ref = res[0].ref
-        return callback(self, anime)
+
+    res: list[Anime] | None = self.search(anime.name)
+    match = next(
+        (found for found in res or [] if found.name.lower() == anime.name.lower()),
+        None,
+    )
+    if match is None:
+        raise ProviderError(
+            f"Errore o nessun risultato durante la ricerca di {anime.name} su {self.__class__.__name__}"
+        )
+    anime.ref = match.ref
+    return callback(self, anime)
 
 
 class Provider(ABC):
@@ -84,10 +89,7 @@ class Provider(ABC):
         Returns:
             list[Anime]: la lista degli anime trovati.
         """
-        res = self._search(input)
-        for anime in res:
-            anime.name = ut.sanitize_filename(anime.name)
-        return res
+        return self._search(input)
 
     @abstractmethod
     def _search(self, input: str) -> list[Anime]:
@@ -96,19 +98,15 @@ class Provider(ABC):
         """
 
     @error_handler(relink=False)
-    def latest(self, filter: str = "all") -> list[Anime]:
+    def latest(self) -> list[Anime]:
         """
         Restituisce le ultime uscite degli anime.
         Si assicura che tutte le entry di uno stesso anime abbiano gli stessi episodi.
 
-        Args:
-            filter (str, optional): permette di filtrare i risultati tra [all, dub, sub]. Default: all.
-
         Returns:
             list[Anime]: la lista degli anime trovati.
         """
-        specials = bool(ut.config_data.get("general", {}).get("specials", False))
-        animes = self._latest(filter, specials)
+        animes = self._latest(SPECIALS_ENABLED)
 
         grouped_animes: dict[str, list[Anime]] = {}
         for anime in animes:
@@ -122,12 +120,12 @@ class Provider(ABC):
                         all_episodes[ep.num] = ep.ref
 
                 for anime in group:
-                    anime.update_episodes(all_episodes, specials=specials)
+                    anime.update_episodes(all_episodes, specials=SPECIALS_ENABLED)
 
         return animes
 
     @abstractmethod
-    def _latest(self, filter: str, specials: bool) -> list[Anime]:
+    def _latest(self, specials: bool) -> list[Anime]:
         """
         Implementazione della latest
         """
@@ -141,10 +139,7 @@ class Provider(ABC):
         Args:
         anime (Anime): l'anime di riferimento.
         """
-        anime.update_episodes(
-            self._episodes(anime),
-            bool(ut.config_data.get("general", {}).get("specials", False)),
-        )
+        anime.update_episodes(self._episodes(anime), SPECIALS_ENABLED)
 
     @abstractmethod
     def _episodes(self, anime: Anime) -> dict[str, str]:
@@ -170,19 +165,6 @@ class Provider(ABC):
             str: il link.
         """
         return self._episode_link(anime, episode)
-
-    @error_handler(relink=True)
-    def episode_links(self, anime: Anime, episode: Anime.Episode) -> list[str]:
-        """
-        Cerca i link video disponibili per l'episodio.
-
-        Il primo link è quello preferito; eventuali link successivi sono mirror
-        da usare come fallback quando il provider restituisce pagine di errore.
-        """
-        links = self._episode_links(anime, episode)
-        if not links:
-            raise ProviderError("Nessun link video trovato")
-        return links
 
     def _episode_links(self, anime: Anime, episode: Anime.Episode) -> list[str]:
         return [self._episode_link(anime, episode)]

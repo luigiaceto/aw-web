@@ -30,7 +30,6 @@ class Anime:
         name (str): il nome dell'anime.
         ref (str): il riferimento dell'anime.
         anilist_id (int): l'ID dell'anime su Anilist.
-        dub (bool): indica se l'anime è doppiato in italiano.
         curr_ep (str): l'episodio corrente.
         last_ep (str): l'ultimo episodio disponibile.
         status (AnimeStatus): lo stato dell'anime.
@@ -41,7 +40,6 @@ class Anime:
         self.name: str = name
         self.ref: str = ref
         self.anilist_id: int = 0
-        self.dub: bool = "(ITA)" in name
         self.curr_ep: str = curr_ep
         self.last_ep: str = last_ep if last_ep != "0" else curr_ep
         self.status: AnimeStatus = status
@@ -54,13 +52,13 @@ class Anime:
             return False
 
         if self.anilist_id and other.anilist_id:
-            return self.anilist_id == other.anilist_id and self.dub == other.dub
+            return self.anilist_id == other.anilist_id
 
         return self.name == other.name # idealmente andrebbe tolto
 
     def __hash__(self) -> int:
         if self.anilist_id:
-            return hash((self.anilist_id, self.dub))
+            return hash(self.anilist_id)
 
         return hash(self.name)
 
@@ -129,7 +127,6 @@ class Anime:
             self.anilist_id = 0
         self.info = info
         self.status = status
-        self.dub = info.get("Audio", "").lower() == "italiano"
 
     def effective_episodes_count(self) -> int:
         """
@@ -218,22 +215,18 @@ class Anime:
         Attributes:
             num (str): il numero dell'episodio.
             ref (str): il riferimento dell'episodio.
-            progress (int): il progresso di visualizzazione dell'episodio.
-            completed (bool): indica se l'episodio è stato completato.
         """
 
         def __init__(self, anime: Anime, num: str, ref: str) -> None:
             self._anime = anime
             self.num = num
             self.ref = ref
-            self.progress = 0
-            self.completed = False
 
         def __str__(self) -> str:
             return f"{self._anime.name} Ep. {self.num}"
 
         def __repr__(self) -> str:
-            return f"Episode(num={self.num}, ref={self.ref}, progress={self.progress}, completed={self.completed})"
+            return f"Episode(num={self.num}, ref={self.ref})"
 
         def __eq__(self, other: object) -> bool:
             if not isinstance(other, Anime.Episode):
@@ -249,46 +242,6 @@ class Anime:
             self_num = self.numeric() if '-' in self.num else float(self.num)
             other_num = other.numeric() if '-' in other.num else float(other.num)
             return self_num < other_num
-
-        def has_next(self) -> bool:
-            """
-            Controlla se esiste un episodio successivo.
-
-            Returns:
-            bool: True se esiste un episodio successivo, False altrimenti.
-            """
-            index = self._anime._num_to_index[self.num] + 1
-            return index < len(self._anime._episodes)
-
-        def has_prev(self) -> bool:
-            """
-            Controlla se esiste un episodio precedente.
-
-            Returns:
-            bool: True se esiste un episodio precedente, False altrimenti.
-            """
-            index = self._anime._num_to_index[self.num] - 1
-            return index >= 0
-
-        def next(self) -> Anime.Episode:
-            """
-            Restituisce l'episodio successivo.
-
-            Returns:
-            Anime.Episode: l'episodio successivo.
-            """
-            index = self._anime._num_to_index[self.num] + 1
-            return self._anime._episodes[index]
-
-        def prev(self) -> Anime.Episode:
-            """
-            Restituisce l'episodio precedente.
-
-            Returns:
-            Anime.Episode: l'episodio precedente.
-            """
-            index = self._anime._num_to_index[self.num] - 1
-            return self._anime._episodes[index]
 
         def numeric(self) -> int:
             """
@@ -306,28 +259,6 @@ class Anime:
                 return int(self.num.split('-')[1])
             return int(self.num)
 
-        def is_completed(self) -> bool:
-            """
-            Check if the episode is completed.
-            """
-            return self.progress == 0 and self.completed
-
-        def set_progress(self, progress: int, completed: bool = False) -> None:
-            """
-            Imposta il progresso dell'episodio.
-            """
-            self.progress = progress
-            self.completed = completed
-            if progress != 0 and not completed:
-                self.completed = False
-
-        def mark_completed(self) -> None:
-            """
-            Segna l'episodio come completato.
-            """
-            self.progress = 0
-            self.completed = True
-
         @classmethod
         def from_dict(cls, anime: Anime, data: dict[str, object]) -> Anime.Episode:
             """
@@ -340,15 +271,11 @@ class Anime:
             Returns:
                 Anime.Episode: l'oggetto Episode creato.
             """
-            episode = cls(
+            return cls(
                 anime,
                 num=str(data["num"]),
                 ref=str(data["ref"])
             )
-            episode.progress = int(data["progress"]) if isinstance(data["progress"], int) else 0
-            episode.completed = bool(data["completed"])
-
-            return episode
 
         def to_dict(self) -> dict[str, object]:
             """
@@ -360,6 +287,4 @@ class Anime:
             return {
                 "num": self.num,
                 "ref": self.ref,
-                "progress": self.progress,
-                "completed": self.completed
         }

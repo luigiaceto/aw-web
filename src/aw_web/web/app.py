@@ -11,7 +11,6 @@ from http.server import ThreadingHTTPServer
 from pathlib import Path
 from typing import Sequence
 
-from aw_web.services.providers import ensure_config
 from aw_web.web.db import default_db_path, prepare_database
 
 
@@ -31,16 +30,18 @@ def reset_database(path: Path) -> bool:
         print("Operazione annullata.")
         return False
 
-    removed = False
-    for candidate in (path, Path(f"{path}-wal"), Path(f"{path}-shm")):
+    removed = path.exists()
+    if removed:
+        # il backup resta accanto al database: un reset sbagliato non distrugge i progressi
+        path.replace(path.with_name(f"{path.name}.bak"))
+    for candidate in (Path(f"{path}-wal"), Path(f"{path}-shm")):
         try:
             candidate.unlink()
-            removed = True
         except FileNotFoundError:
             pass
 
     if removed:
-        print(f"Database locale cancellato: {path}")
+        print(f"Database locale cancellato: {path} (backup: {path}.bak)")
     else:
         print(f"Nessun database locale trovato in {path}")
     return removed
@@ -52,7 +53,6 @@ def main(argv: Sequence[str] | None = None) -> None:
         reset_database(default_db_path())
         return
 
-    ensure_config()
     db_result = prepare_database(default_db_path())
     print(f"Database locale: {db_result.path}")
     if db_result.created:

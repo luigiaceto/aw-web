@@ -120,6 +120,38 @@ def test_validate_database_schema_fails_on_extra_table(tmp_path):
     assert "Tabella non prevista: episode_progress" in errors
 
 
+def test_validate_database_schema_fails_on_missing_unique_constraint(tmp_path):
+    db_path = tmp_path / "web.sqlite3"
+    WebDatabase(db_path)
+    with sqlite3.connect(db_path) as conn:
+        conn.execute("ALTER TABLE watchlist RENAME TO watchlist_old")
+        conn.execute(
+            """
+            CREATE TABLE watchlist (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                provider TEXT NOT NULL,
+                name TEXT NOT NULL,
+                ref TEXT NOT NULL,
+                anilist_id INTEGER NOT NULL DEFAULT 0,
+                current_episode TEXT NOT NULL DEFAULT '0',
+                last_episode TEXT NOT NULL DEFAULT '0',
+                status TEXT NOT NULL DEFAULT 'Sconosciuto',
+                cover_url TEXT NOT NULL DEFAULT '',
+                banner_url TEXT NOT NULL DEFAULT '',
+                anime_json TEXT NOT NULL,
+                episodes_checked_at TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+        conn.execute("DROP TABLE watchlist_old")
+
+    errors = validate_database_schema(db_path)
+
+    assert any("Indici non validi in watchlist" in error for error in errors)
+
+
 def test_validate_database_schema_fails_on_wrong_column_signature(tmp_path):
     db_path = tmp_path / "web.sqlite3"
     WebDatabase(db_path)

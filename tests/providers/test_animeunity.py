@@ -7,6 +7,12 @@ from aw_web.anime import Anime, AnimeStatus
 
 FIXTURES_DIR = Path(__file__).parent.parent / "fixtures"
 
+if not all((FIXTURES_DIR / name).exists() for name in ("au_search.json", "au_latest.html", "au_info.json")):
+    pytest.skip(
+        "Fixture AnimeUnity mancanti: esegui pytest --update-fixtures per scaricarle.",
+        allow_module_level=True,
+    )
+
 
 class TestAnimeunity:
     """Test unitari per il provider AnimeUnity usando le fixtures aggiornabili dinamicamente."""
@@ -33,7 +39,7 @@ class TestAnimeunity:
         html = (FIXTURES_DIR / "au_latest.html").read_text(encoding="utf-8")
         setattr(au, "_session", html)
 
-        animes = au._latest("a", specials=False)
+        animes = au._latest(specials=False)
         assert len(animes) > 0, "Nessun anime trovato nella fixture per il latest"
         assert animes[0].name != ""
         for anime in animes:

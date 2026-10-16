@@ -3,12 +3,16 @@
 from __future__ import annotations
 
 import json
-from urllib.parse import unquote
+import threading
+from concurrent.futures import ThreadPoolExecutor
+from functools import partial
+from typing import Any, Callable
 
 from aw_web import providers
 from aw_web.anime import Anime
 from aw_web.services.anilist import (
     RANKED_LISTS,
+    SeasonalAnime,
     adjacent_season,
     current_season,
     get_cover,
@@ -20,7 +24,7 @@ from aw_web.services.anilist import (
     seasonal_by_id,
     seasonal_label,
 )
-from aw_web.services.matching import best_seasonal_match, seasonal_open_url
+from aw_web.services.matching import best_seasonal_match
 from aw_web.services.providers import default_provider_name, get_provider, set_current_provider
 from aw_web.web.components import (
     anilist_card,
@@ -33,18 +37,47 @@ from aw_web.web.components import (
     provider_match_card,
     seasonal_card,
     watch_card,
+    watchlist_refresh_script,
 )
 from aw_web.web.state import DB
-from aw_web.web.utils import esc, parse_int, provider_error, q
+from aw_web.web.utils import anime_url, esc, parse_int, provider_error, q
 from aw_web.web.watchlist_refresh import refresh_watchlist_availability
 
 
 HERO_SLIDE_SECONDS = 8
 HERO_FADE_SECONDS = 0.8
 
+_WATCHLIST_REFRESH_LOCK = threading.Lock()
+_WATCHLIST_REFRESH_RUNNING = False
+
 
 def redirect(location: str) -> bytes:
     return f"REDIRECT:{location}".encode("utf-8")
+
+
+def start_watchlist_refresh(task: Callable[[], None]) -> None:
+    """Esegue il refresh della watchlist in background: la home non aspetta la rete."""
+    global _WATCHLIST_REFRESH_RUNNING
+    with _WATCHLIST_REFRESH_LOCK:
+        if _WATCHLIST_REFRESH_RUNNING:
+            return
+        _WATCHLIST_REFRESH_RUNNING = True
+
+    def run() -> None:
+        global _WATCHLIST_REFRESH_RUNNING
+        try:
+            task()
+        finally:
+            with _WATCHLIST_REFRESH_LOCK:
+                _WATCHLIST_REFRESH_RUNNING = False
+
+    threading.Thread(target=run, daemon=True).start()
+
+
+def _prefetch_covers(items: list[Anime]) -> None:
+    """Riscalda la cache copertine in parallelo: ogni card poi legge solo dal database."""
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        list(pool.map(lambda anime: get_cover(anime.anilist_id, anime.name, allow_title_lookup=False), items))
 
 
 def _hero_slideshow(items: list[dict[str, object]]) -> str:
@@ -88,28 +121,42 @@ def _hero_slideshow(items: list[dict[str, object]]) -> str:
     )
 
 
+def watchlist_items() -> list[dict[str, Any]]:
+    return [
+        item for item in DB.watchlist()
+        if str(item.get("provider") or "") in providers.PROVIDERS_AVAILABLE
+    ]
+
+
+def watch_cards_html(items: list[dict[str, Any]], latest: list[Anime] | None = None) -> str:
+    html = "".join(watch_card(item, latest or []) for item in items)
+    return html or '<p class="muted">La watchlist è vuota. Cerca un anime e aggiungilo.</p>'
+
+
+def watchlist_cards_payload() -> bytes:
+    """Frammento della watchlist + stato del refresh: il browser lo legge appena è finito."""
+    with _WATCHLIST_REFRESH_LOCK:
+        refreshing = _WATCHLIST_REFRESH_RUNNING
+    payload = {"refreshing": refreshing, "html": watch_cards_html(watchlist_items())}
+    return json.dumps(payload).encode("utf-8")
+
+
 def render_home() -> bytes:
     provider_name = default_provider_name()
     provider = get_provider(provider_name)
     latest: list[Anime] = []
     try:
-        latest = provider.latest("a")[:36]
+        latest = provider.latest()[:36]
+        _prefetch_covers(latest)
         latest_html = "".join(card(anime, provider_name, "Nuovo") for anime in latest)
     except Exception as exc:
         latest_html = f'<p class="error">Impossibile caricare gli ultimi episodi: {esc(provider_error(exc))}</p>'
 
-    watch_items = [
-        item for item in DB.watchlist()
-        if str(item.get("provider") or "") in providers.PROVIDERS_AVAILABLE
-    ]
-    refresh_watchlist_availability(DB, watch_items, provider_factory=get_provider)
-    watch_items = [
-        item for item in DB.watchlist()
-        if str(item.get("provider") or "") in providers.PROVIDERS_AVAILABLE
-    ]
-    watch_html = "".join(watch_card(item, latest) for item in watch_items)
-    if not watch_html:
-        watch_html = '<p class="muted">La watchlist è vuota. Cerca un anime e aggiungilo.</p>'
+    watch_items = watchlist_items()
+    start_watchlist_refresh(
+        partial(refresh_watchlist_availability, DB, watch_items, provider_factory=get_provider)
+    )
+    watch_html = watch_cards_html(watch_items, latest)
 
     favorite_items = [
         item for item in DB.favorites()
@@ -142,6 +189,7 @@ def render_home() -> bytes:
       <div class="section-title"><h2>Ultimi episodi</h2></div>
       <div class="rail">{latest_html}</div>
     </section>
+    {watchlist_refresh_script()}
     """
     return page("Home", body)
 
@@ -218,6 +266,40 @@ def render_seasonal(params: dict[str, list[str]]) -> bytes:
     return page(f"Stagionali - {seasonal_label(season)} {year}", body)
 
 
+def _provider_candidates_page(
+    *,
+    item: SeasonalAnime,
+    provider_name: str,
+    page_title: str,
+    back_url: str,
+    back_label: str,
+) -> bytes:
+    """Cerca l'anime sul provider: redirect se il match è sicuro, altrimenti scelta manuale."""
+    try:
+        match, candidates = best_seasonal_match(provider_name, item)
+    except Exception as exc:
+        return page(page_title, f'<p class="error">Errore ricerca provider: {esc(provider_error(exc))}</p>')
+
+    if match:
+        return redirect(anime_url(provider_name, match))
+
+    candidates_html = "".join(provider_match_card(anime, provider_name) for anime in candidates)
+    if not candidates_html:
+        candidates_html = f'<p class="muted">Non ho trovato "{esc(item.title)}" su {esc(provider_name)}.</p>'
+
+    body = f"""
+    <section>
+      <div class="section-title">
+        <h2>Risultati possibili</h2>
+        <a class="button secondary" href="{back_url}">{esc(back_label)}</a>
+      </div>
+      <p class="muted">Non c'e un match abbastanza sicuro per {esc(item.title)}. Scegli manualmente un risultato.</p>
+      <div class="grid">{candidates_html}</div>
+    </section>
+    """
+    return page(f"Scegli risultato - {item.title}", body)
+
+
 def render_seasonal_open(params: dict[str, list[str]]) -> bytes:
     default_year, default_season = current_season()
     provider_name = default_provider_name()
@@ -231,30 +313,13 @@ def render_seasonal_open(params: dict[str, list[str]]) -> bytes:
     if not item:
         return page("Stagionali", '<p class="error">Anime stagionale non trovato.</p>')
 
-    try:
-        match, candidates = best_seasonal_match(provider_name, item)
-    except Exception as exc:
-        return page("Stagionali", f'<p class="error">Errore ricerca provider: {esc(provider_error(exc))}</p>')
-
-    if match:
-        return redirect(seasonal_open_url(provider_name, match))
-
-    back_url = f"/stagionali?year={q(year)}&season={q(season)}"
-    candidates_html = "".join(provider_match_card(anime, provider_name) for anime in candidates)
-    if not candidates_html:
-        candidates_html = f'<p class="muted">Non ho trovato "{esc(item.title)}" su {esc(provider_name)}.</p>'
-
-    body = f"""
-    <section>
-      <div class="section-title">
-        <h2>Risultati possibili</h2>
-        <a class="button secondary" href="{back_url}">Torna agli stagionali</a>
-      </div>
-      <p class="muted">Non c'e un match abbastanza sicuro per {esc(item.title)}. Scegli manualmente un risultato.</p>
-      <div class="grid">{candidates_html}</div>
-    </section>
-    """
-    return page(f"Scegli risultato - {item.title}", body)
+    return _provider_candidates_page(
+        item=item,
+        provider_name=provider_name,
+        page_title="Stagionali",
+        back_url=f"/stagionali?year={q(year)}&season={q(season)}",
+        back_label="Torna agli stagionali",
+    )
 
 
 def render_anilist_ranking(source: str) -> bytes:
@@ -289,39 +354,18 @@ def render_anilist_open(params: dict[str, list[str]]) -> bytes:
     if source not in RANKED_LISTS:
         source = "popolari"
     provider_name = default_provider_name()
-    try:
-        anilist_id = parse_int(params.get("anilist_id", ["0"])[0])
-    except ValueError:
-        return page(ranked_list_label(source), '<p class="error">Richiesta AniList non valida.</p>')
-
+    anilist_id = parse_int(params.get("anilist_id", ["0"])[0])
     item = ranked_by_id(source, anilist_id)
     if not item:
         return page(ranked_list_label(source), '<p class="error">Anime AniList non trovato.</p>')
 
-    try:
-        match, candidates = best_seasonal_match(provider_name, item)
-    except Exception as exc:
-        return page(ranked_list_label(source), f'<p class="error">Errore ricerca provider: {esc(provider_error(exc))}</p>')
-
-    if match:
-        return redirect(seasonal_open_url(provider_name, match))
-
-    back_url = f"/{q(source)}"
-    candidates_html = "".join(provider_match_card(anime, provider_name) for anime in candidates)
-    if not candidates_html:
-        candidates_html = f'<p class="muted">Non ho trovato "{esc(item.title)}" su {esc(provider_name)}.</p>'
-
-    body = f"""
-    <section>
-      <div class="section-title">
-        <h2>Risultati possibili</h2>
-        <a class="button secondary" href="{back_url}">Torna a {esc(ranked_list_label(source))}</a>
-      </div>
-      <p class="muted">Non c'e un match abbastanza sicuro per {esc(item.title)}. Scegli manualmente un risultato.</p>
-      <div class="grid">{candidates_html}</div>
-    </section>
-    """
-    return page(f"Scegli risultato - {item.title}", body)
+    return _provider_candidates_page(
+        item=item,
+        provider_name=provider_name,
+        page_title=ranked_list_label(source),
+        back_url=f"/{q(source)}",
+        back_label=f"Torna a {ranked_list_label(source)}",
+    )
 
 
 def render_anime(params: dict[str, list[str]]) -> bytes:
@@ -331,17 +375,17 @@ def render_anime(params: dict[str, list[str]]) -> bytes:
 
     saved = params.get("saved", [""])[0] == "1"
     if saved:
-        ref = unquote(params.get("ref", [""])[0])
+        ref = params.get("ref", [""])[0]
         item = DB.find_watch_item(provider_name, ref) or DB.find_favorite_item(provider_name, ref) or DB.find_history_item(provider_name, ref)
         if not item:
             return page("Non trovato", '<p class="error">Anime non trovato.</p>')
         anime = Anime.from_dict(json.loads(str(item["anime_json"])))
     else:
         anime = Anime(
-            name=unquote(params.get("name", [""])[0]),
-            ref=unquote(params.get("ref", [""])[0]),
-            curr_ep=unquote(params.get("curr_ep", ["0"])[0]),
-            last_ep=unquote(params.get("last_ep", ["0"])[0]),
+            name=params.get("name", [""])[0],
+            ref=params.get("ref", [""])[0],
+            curr_ep=params.get("curr_ep", ["0"])[0],
+            last_ep=params.get("last_ep", ["0"])[0],
         )
         anilist_id = parse_int(params.get("anilist_id", ["0"])[0])
         if anilist_id:
@@ -355,7 +399,7 @@ def render_anime(params: dict[str, list[str]]) -> bytes:
     except Exception as exc:
         info_error = provider_error(exc)
     try:
-        if saved or not anime.episodes() or not anime.has_all_episodes():
+        if not anime.episodes() or (not saved and not anime.has_all_episodes()):
             provider.episodes(anime)
     except Exception as exc:
         episodes_error = provider_error(exc)

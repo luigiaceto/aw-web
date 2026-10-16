@@ -9,11 +9,41 @@ from aw_web.anime import Anime
 from aw_web.services.anilist import get_cover
 from aw_web.web.state import CSRF_TOKEN
 from aw_web.web.styles import CSS
-from aw_web.web.utils import anime_to_json, available_last_episode, esc, has_new_episode, next_playable_episode, q
+from aw_web.web.utils import anime_to_json, anime_url, episode_overview, episode_value, esc, q
 
 
 def csrf_input() -> str:
     return f'<input type="hidden" name="csrf_token" value="{esc(CSRF_TOKEN)}">'
+
+
+def watchlist_refresh_script() -> str:
+    """Aggiorna la sezione watchlist quando il refresh in background è finito."""
+    return """
+      <script>
+        (() => {
+          const rail = document.querySelector("#watchlist .rail");
+          if (!rail) return;
+          let polls = 0;
+          const poll = async () => {
+            let data;
+            try {
+              const response = await fetch("/watchlist/cards", {
+                credentials: "same-origin",
+                headers: { "Accept": "application/json" },
+              });
+              if (!response.ok) return;
+              data = await response.json();
+            } catch (error) {
+              return;
+            }
+            rail.innerHTML = data.html;
+            if (!data.refreshing || polls++ > 20) return;
+            window.setTimeout(poll, 1500);
+          };
+          window.setTimeout(poll, 1500);
+        })();
+      </script>
+    """
 
 
 def page(title: str, body: str) -> bytes:
@@ -176,10 +206,6 @@ def _pill(label: str, class_name: str = "") -> str:
     return f'<span class="{classes}">{esc(label)}</span>'
 
 
-def _link_action(href: str, label: str, icon: str = "") -> str:
-    return f'<a class="button secondary card-action" href="{esc(href)}">{icon}<span>{esc(label)}</span></a>'
-
-
 def _remove_form(action: str, item_id: object, label: str) -> str:
     return f"""
     <form action="{esc(action)}" method="post">
@@ -214,8 +240,9 @@ def _catalog_card(
     description: str = "",
     actions: str = "",
     class_name: str = "",
+    badge_extra: str = "",
 ) -> str:
-    badge_html = "".join(_pill(badge) for badge in badges if badge)
+    badge_html = "".join(_pill(badge) for badge in badges if badge) + badge_extra
     description_html = (
         f'<p class="hover-description">{esc(description)}</p>'
         if description
@@ -246,10 +273,7 @@ def _catalog_card(
 def card(anime: Anime, provider_name: str, badge: str = "") -> str:
     cover = get_cover(anime.anilist_id, anime.name, allow_title_lookup=False)
     image = image_html(cover["cover_url"], anime.name)
-    href = (
-        f"/anime?provider={q(provider_name)}&name={q(anime.name)}&ref={q(anime.ref)}"
-        f"&curr_ep={q(anime.curr_ep)}&last_ep={q(anime.last_ep)}&anilist_id={q(anime.anilist_id)}"
-    )
+    href = anime_url(provider_name, anime)
     info = []
     if anime.curr_ep and anime.curr_ep != "0":
         info.append(f"Ep. {esc(anime.curr_ep)}")
@@ -314,10 +338,7 @@ def anilist_card(item: Any, source: str, badge: str) -> str:
 
 def provider_match_card(anime: Anime, provider_name: str) -> str:
     cover = get_cover(anime.anilist_id, anime.name, allow_title_lookup=False)
-    href = (
-        f"/anime?provider={q(provider_name)}&name={q(anime.name)}&ref={q(anime.ref)}"
-        f"&curr_ep={q(anime.curr_ep)}&last_ep={q(anime.last_ep)}&anilist_id={q(anime.anilist_id)}"
-    )
+    href = anime_url(provider_name, anime)
     return _catalog_card(
         title=anime.name,
         href=href,
@@ -326,18 +347,6 @@ def provider_match_card(anime: Anime, provider_name: str) -> str:
         meta=f"Ep. {anime.curr_ep or '0'} / {anime.last_ep or '0'}",
         description=_anime_description(anime),
     )
-
-
-def play_form(provider_name: str, anime: Anime, episode_num: str, label: str) -> str:
-    return f"""
-    <form action="/play" method="post">
-      {csrf_input()}
-      <input type="hidden" name="provider" value="{esc(provider_name)}">
-      <input type="hidden" name="anime" value="{esc(anime_to_json(anime))}">
-      <input type="hidden" name="episode" value="{esc(episode_num)}">
-      <button>{esc(label)}</button>
-    </form>
-    """
 
 
 def collection_toggle(
@@ -414,10 +423,7 @@ def favorite_card(item: dict[str, Any]) -> str:
     anime_data = json.loads(str(item["anime_json"]))
     anime = Anime.from_dict(anime_data)
     cover_url = str(item.get("cover_url") or "")
-    href = (
-        f"/anime?provider={q(item['provider'])}&name={q(anime.name)}&ref={q(anime.ref)}"
-        f"&curr_ep={q(anime.curr_ep)}&last_ep={q(anime.last_ep)}&anilist_id={q(anime.anilist_id)}"
-    )
+    href = anime_url(str(item["provider"]), anime)
     meta = _meta_text([
         str(item.get("status") or ""),
         f"Ep. {item.get('current_episode') or anime.curr_ep or '0'} / {item.get('last_episode') or anime.last_ep or '0'}",
@@ -439,11 +445,14 @@ def watch_card(item: dict[str, Any], latest: list[Anime]) -> str:
     anime_data = json.loads(str(item["anime_json"]))
     anime = Anime.from_dict(anime_data)
     cover_url = str(item.get("cover_url") or "")
-    href = f"/anime?saved=1&provider={q(item['provider'])}&name={q(item['name'])}&ref={q(item['ref'])}"
-    new_episode_badge = '<span class="badge new-episode">Nuovo episodio</span>' if has_new_episode(item, latest) else ""
+    href = anime_url(str(item["provider"]), anime, saved=True)
     current_episode = str(item["current_episode"])
-    last_episode = available_last_episode(item, latest)
-    playable_episode = next_playable_episode(item, latest)
+    last_episode, playable_episode = episode_overview(item, latest)
+    new_episode_badge = (
+        '<span class="badge new-episode">Nuovo episodio</span>'
+        if episode_value(last_episode) > episode_value(current_episode)
+        else ""
+    )
     play_label = "Inizia" if current_episode == "0" else "Riprendi"
     meta = _meta_text([
         f"Ep. {current_episode} / {last_episode}",
@@ -462,9 +471,7 @@ def watch_card(item: dict[str, Any], latest: list[Anime]) -> str:
         description=_anime_description(anime),
         actions=actions,
         class_name="saved-card watch-card",
-    ).replace(
-        '<div class="badge-row"><span class="badge">Watchlist</span></div>',
-        f'<div class="badge-row"><span class="badge">Watchlist</span>{new_episode_badge}</div>',
+        badge_extra=new_episode_badge,
     )
 
 

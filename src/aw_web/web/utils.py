@@ -5,7 +5,7 @@ from __future__ import annotations
 import html
 import json
 from typing import Any
-from urllib.parse import quote
+from urllib.parse import quote, urlencode
 
 from aw_web.anime import Anime
 
@@ -51,29 +51,23 @@ def episode_value(value: str) -> float:
         return 0
 
 
-def has_new_episode(item: dict[str, Any], latest: list[Anime]) -> bool:
-    current = episode_value(str(item["current_episode"]))
-    return episode_value(available_last_episode(item, latest)) > current
+def anime_url(provider: str, anime: Anime, *, saved: bool = False) -> str:
+    """Link alla pagina dettaglio dell'anime."""
+    query = urlencode(
+        {
+            "provider": provider,
+            "name": anime.name,
+            "ref": anime.ref,
+            "curr_ep": anime.curr_ep,
+            "last_ep": anime.last_ep,
+            "anilist_id": anime.anilist_id,
+        }
+    )
+    return f"/anime?saved=1&{query}" if saved else f"/anime?{query}"
 
 
-def available_last_episode(item: dict[str, Any], latest: list[Anime]) -> str:
-    anime_data = json.loads(str(item["anime_json"]))
-    anime = Anime.from_dict(anime_data)
-    candidates = [
-        str(item["last_episode"]),
-        anime.last_ep,
-        *(ep.num for ep in anime._episodes),
-    ]
-
-    for latest_anime in latest:
-        if anime == latest_anime:
-            candidates.extend([latest_anime.curr_ep, latest_anime.last_ep])
-            candidates.extend(ep.num for ep in latest_anime._episodes)
-
-    return max(candidates, key=episode_value, default="0")
-
-
-def next_playable_episode(item: dict[str, Any], latest: list[Anime]) -> str:
+def episode_overview(item: dict[str, Any], latest: list[Anime]) -> tuple[str, str]:
+    """Ritorna (ultimo episodio disponibile, prossimo episodio da guardare)."""
     anime_data = json.loads(str(item["anime_json"]))
     anime = Anime.from_dict(anime_data)
     current_episode = str(item["current_episode"])
@@ -96,15 +90,10 @@ def next_playable_episode(item: dict[str, Any], latest: list[Anime]) -> str:
         if next_number <= int(last_available):
             candidates.append(str(next_number))
 
-    if current <= 0:
-        return min(
-            (candidate for candidate in candidates if episode_value(candidate) > 0),
-            key=episode_value,
-            default=current_episode,
-        )
-
-    return min(
-        (candidate for candidate in candidates if episode_value(candidate) > current),
+    threshold = current if current > 0 else 0
+    next_playable = min(
+        (candidate for candidate in candidates if episode_value(candidate) > threshold),
         key=episode_value,
         default=current_episode,
     )
+    return last_available, next_playable
