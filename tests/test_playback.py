@@ -227,7 +227,9 @@ def test_start_job_reports_the_outcome(monkeypatch, error, status, message):
 
 
 def test_start_job_prunes_old_jobs(monkeypatch):
-    monkeypatch.setattr(playback, "_JOBS", {"old": PlaybackJob(created_at=0)})
+    # relativo all'orologio: monotonic() parte dall'avvio della macchina, che in CI è appena partita
+    old_job = PlaybackJob(created_at=time.monotonic() - playback.JOB_RETENTION_SECONDS - 1)
+    monkeypatch.setattr(playback, "_JOBS", {"old": old_job})
     monkeypatch.setattr(playback, "play_episode", lambda anime, episode_num: None)
 
     job_id = start_job(Anime("Example", "4851"), "1")
