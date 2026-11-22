@@ -1,9 +1,8 @@
 """Test delle scritture dati utente: watchlist, preferiti e progressi."""
 
+from aw_web import library
 from aw_web.anime import Anime
-from aw_web.services import collections
-from aw_web.web.db import WebDatabase
-from aw_web.web.utils import saved_anime
+from aw_web.db import WebDatabase, saved_anime
 
 
 def _anime() -> Anime:
@@ -15,25 +14,25 @@ def _anime() -> Anime:
 
 def test_toggle_watchlist_adds_then_removes(monkeypatch, tmp_path):
     db = WebDatabase(tmp_path / "web.sqlite3")
-    monkeypatch.setattr(collections, "DB", db)
+    monkeypatch.setattr(library, "DB", db)
     anime = _anime()
 
-    collections.toggle("watchlist", anime)
+    library.toggle("watchlist", anime)
     item = db.find("watchlist", anime.ref)
     assert item is not None
     assert saved_anime(item).cover_url == "https://img.example/cover.jpg"
 
-    collections.toggle("watchlist", anime)
+    library.toggle("watchlist", anime)
     assert db.find("watchlist", anime.ref) is None
 
 
 def test_toggle_watchlist_keeps_history_progress(monkeypatch, tmp_path):
     db = WebDatabase(tmp_path / "web.sqlite3")
-    monkeypatch.setattr(collections, "DB", db)
+    monkeypatch.setattr(library, "DB", db)
     anime = _anime()
     db.upsert("watch_history", anime.to_dict(), "2")
 
-    collections.toggle("watchlist", anime)
+    library.toggle("watchlist", anime)
 
     item = db.find("watchlist", anime.ref)
     assert item is not None
@@ -42,24 +41,24 @@ def test_toggle_watchlist_keeps_history_progress(monkeypatch, tmp_path):
 
 def test_toggle_favorite_adds_then_removes(monkeypatch, tmp_path):
     db = WebDatabase(tmp_path / "web.sqlite3")
-    monkeypatch.setattr(collections, "DB", db)
+    monkeypatch.setattr(library, "DB", db)
     anime = _anime()
 
-    collections.toggle("favorites", anime)
+    library.toggle("favorites", anime)
     assert db.find("favorites", anime.ref) is not None
 
-    collections.toggle("favorites", anime)
+    library.toggle("favorites", anime)
     assert db.find("favorites", anime.ref) is None
 
 
 def test_save_watch_progress_updates_history_watchlist_and_favorites(monkeypatch, tmp_path):
     db = WebDatabase(tmp_path / "web.sqlite3")
-    monkeypatch.setattr(collections, "DB", db)
+    monkeypatch.setattr(library, "DB", db)
     anime = _anime()
     db.upsert("watchlist", anime.to_dict(), "1")
     db.upsert("favorites", anime.to_dict(), "1")
 
-    collections.save_watch_progress(anime, anime.episode("2"))
+    library.save_watch_progress(anime, anime.episode("2"))
 
     history = db.find("watch_history", anime.ref)
     watch_item = db.find("watchlist", anime.ref)
@@ -75,10 +74,10 @@ def test_save_watch_progress_updates_history_watchlist_and_favorites(monkeypatch
 
 def test_save_watch_progress_does_not_create_a_watchlist_entry(monkeypatch, tmp_path):
     db = WebDatabase(tmp_path / "web.sqlite3")
-    monkeypatch.setattr(collections, "DB", db)
+    monkeypatch.setattr(library, "DB", db)
     anime = _anime()
 
-    collections.save_watch_progress(anime, anime.episode("1"))
+    library.save_watch_progress(anime, anime.episode("1"))
 
     assert db.find("watch_history", anime.ref) is not None
     assert db.find("watchlist", anime.ref) is None

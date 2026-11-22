@@ -4,10 +4,9 @@ from __future__ import annotations
 
 from difflib import SequenceMatcher
 
+from aw_web.anilist import SeasonalAnime
 from aw_web.anime import Anime
-from aw_web.services.anilist import SeasonalAnime
-from aw_web.providers import PROVIDER
-from aw_web.providers.animeunity import split_ref
+from aw_web.animeunity import PROVIDER, split_ref
 
 
 def find_seasonal_matches(seasonal: SeasonalAnime) -> list[Anime]:
@@ -43,10 +42,7 @@ def _same_provider_result(first: Anime, second: Anime) -> bool:
 
 def _seasonal_match_score(anime: Anime, seasonal: SeasonalAnime) -> float:
     anime_title = _normalize_title(anime.name)
-    scores = [
-        SequenceMatcher(None, anime_title, _normalize_title(title)).ratio()
-        for title in seasonal.search_titles
-    ]
+    scores = [SequenceMatcher(None, anime_title, _normalize_title(title)).ratio() for title in seasonal.search_titles]
     return max(scores or [0.0])
 
 

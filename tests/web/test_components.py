@@ -4,9 +4,8 @@ from urllib.parse import parse_qs, urlparse
 
 import pytest
 
-from aw_web.anime import Anime
-from aw_web.web.components import anilist_card, card, favorite_card, seasonal_card, watch_card
-from aw_web.web.utils import anime_url, episode_overview
+from aw_web.anime import Anime, episode_overview
+from aw_web.web.components import anilist_card, anime_url, card, favorite_card, seasonal_card, watch_card
 from tests.helpers import saved_row, seasonal
 
 
@@ -121,7 +120,9 @@ def test_card_text_is_escaped_once():
             id="seasonal-card",
         ),
         pytest.param(
-            anilist_card(seasonal(anilist_id=321, episodes=24, genres=("Drama",), average_score=91), "popolari", "Popolari"),
+            anilist_card(
+                seasonal(anilist_id=321, episodes=24, genres=("Drama",), average_score=91), "popolari", "Popolari"
+            ),
             "/anilist/apri?source=popolari&amp;anilist_id=321",
             "Drama | 24 ep. | Voto AniList 91%",
             id="anilist-card",

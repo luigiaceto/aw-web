@@ -4,23 +4,20 @@ from __future__ import annotations
 
 import json
 import sys
-import threading
-import time
-import uuid
-from dataclasses import dataclass, field
-from importlib.resources import files
 from http.server import BaseHTTPRequestHandler
+from importlib.resources import files
+from pathlib import Path
 from secrets import compare_digest
 from typing import Literal
 from urllib.parse import parse_qs, urlparse
 
-from aw_web.anime import Anime
-from aw_web.services.collections import toggle
-from aw_web.services.playback import play_episode
-from aw_web.web.components import page
-from aw_web.web.state import CSRF_TOKEN, DB, HOST, PORT
-from aw_web.web.utils import anime_from_json, anime_url, esc, q
-from aw_web.web.views import (
+from aw_web.anime import Anime, anime_from_json
+from aw_web.db import DB
+from aw_web.library import toggle
+from aw_web.playback import job_status, play_episode, start_job
+from aw_web.web import CSRF_TOKEN, HOST, PORT
+from aw_web.web.components import anime_url, esc, page, q
+from aw_web.web.pages import (
     redirect,
     render_anilist_open,
     render_anilist_ranking,
@@ -32,27 +29,24 @@ from aw_web.web.views import (
     watchlist_cards_payload,
 )
 
-
 MAX_POST_BYTES = 1024 * 1024
 ALLOWED_ORIGINS = {f"http://{HOST}:{PORT}", f"http://localhost:{PORT}"}
-PLAYBACK_JOB_TIMEOUT_SECONDS = 60.0
-PLAYBACK_JOB_RETENTION_SECONDS = 300.0
 
 
-@dataclass
-class PlaybackJob:
-    redirect: str
-    status: str = "pending"
-    error: str = ""
-    created_at: float = field(default_factory=time.monotonic)
+STATIC_TYPES = {
+    ".css": "text/css; charset=utf-8",
+    ".js": "text/javascript; charset=utf-8",
+    ".ico": "image/x-icon",
+}
 
 
-PLAYBACK_JOBS: dict[str, PlaybackJob] = {}
-PLAYBACK_JOBS_LOCK = threading.Lock()
-
-
-def favicon_bytes() -> bytes:
-    return files("aw_web.web").joinpath("static/favicon.ico").read_bytes()
+def static_file(name: str) -> tuple[bytes, str] | None:
+    """Contenuto e tipo di un file in web/static; None se il nome non è un file servibile."""
+    content_type = STATIC_TYPES.get(Path(name).suffix)
+    if not content_type or Path(name).name != name:  # niente sottocartelle né "../"
+        return None
+    resource = files("aw_web.web").joinpath("static", name)
+    return (resource.read_bytes(), content_type) if resource.is_file() else None
 
 
 def handle_toggle(table: Literal["watchlist", "favorites"], fields: dict[str, list[str]]) -> bytes:
@@ -66,95 +60,43 @@ def handle_remove(table: Literal["watchlist", "favorites"], fields: dict[str, li
     return redirect("/")
 
 
-def handle_play(fields: dict[str, list[str]]) -> bytes:
-    return redirect(play_redirect_url(fields))
-
-
 def play_request(fields: dict[str, list[str]]) -> tuple[Anime, str]:
     anime = anime_from_json(fields.get("anime", ["{}"])[0])
-    episode_num = fields.get("episode", [anime.curr_ep])[0]
-    return anime, episode_num
+    return anime, fields.get("episode", [anime.curr_ep])[0]
 
 
-def play_redirect_url(fields: dict[str, list[str]]) -> str:
+def handle_play(fields: dict[str, list[str]]) -> bytes:
+    """Senza JavaScript: apre l'episodio e poi torna alla scheda."""
     anime, episode_num = play_request(fields)
     play_episode(anime, episode_num)
-    return anime_url(anime)
+    return redirect(anime_url(anime))
 
 
 def handle_play_start(fields: dict[str, list[str]]) -> bytes:
     anime, episode_num = play_request(fields)
-    job_id = uuid.uuid4().hex
-    redirect_url = anime_url(anime)
-    with PLAYBACK_JOBS_LOCK:
-        now = time.monotonic()
-        for old_id in [
-            key for key, job in PLAYBACK_JOBS.items()
-            if now - job.created_at > PLAYBACK_JOB_RETENTION_SECONDS
-        ]:
-            del PLAYBACK_JOBS[old_id]
-        PLAYBACK_JOBS[job_id] = PlaybackJob(redirect=redirect_url)
-    start_playback_job(job_id, anime, episode_num)
-    return json.dumps(
-        {
-            "job_id": job_id,
-            "status_url": f"/play/status?id={q(job_id)}",
-            "redirect": redirect_url,
-        }
-    ).encode("utf-8")
-
-
-def start_playback_job(job_id: str, anime: Anime, episode_num: str) -> None:
-    thread = threading.Thread(
-        target=run_playback_job,
-        args=(job_id, anime, episode_num),
-        daemon=True,
-    )
-    thread.start()
-
-
-def run_playback_job(job_id: str, anime: Anime, episode_num: str) -> None:
-    try:
-        play_episode(anime, episode_num)
-    except Exception as exc:
-        with PLAYBACK_JOBS_LOCK:
-            if job := PLAYBACK_JOBS.get(job_id):
-                job.status = "error"
-                job.error = str(exc)
-        return
-
-    with PLAYBACK_JOBS_LOCK:
-        if job := PLAYBACK_JOBS.get(job_id):
-            job.status = "ready"
+    job_id = start_job(anime, episode_num)
+    payload = {"job_id": job_id, "status_url": f"/play/status?id={q(job_id)}", "redirect": anime_url(anime)}
+    return json.dumps(payload).encode("utf-8")
 
 
 def handle_play_status(params: dict[str, list[str]]) -> bytes:
-    job_id = params.get("id", [""])[0]
-    with PLAYBACK_JOBS_LOCK:
-        job = PLAYBACK_JOBS.get(job_id)
-        if not job:
-            return json.dumps(
-                {"status": "error", "redirect": "", "error": "Richiesta di riproduzione non trovata."}
-            ).encode("utf-8")
-
-        if job.status == "pending" and time.monotonic() - job.created_at > PLAYBACK_JOB_TIMEOUT_SECONDS:
-            job.status = "error"
-            job.error = "Timeout durante l'apertura di MPV."
-
-        return json.dumps(
-            {
-                "status": job.status,
-                "redirect": job.redirect,
-                "error": job.error,
-            }
-        ).encode("utf-8")
+    job = job_status(params.get("id", [""])[0])
+    payload = (
+        {"status": job.status, "error": job.error}
+        if job
+        else {
+            "status": "error",
+            "error": "Richiesta di riproduzione non trovata.",
+        }
+    )
+    return json.dumps(payload).encode("utf-8")
 
 
 class WebHandler(BaseHTTPRequestHandler):
     def do_HEAD(self) -> None:
-        parsed = urlparse(self.path)
-        if parsed.path == "/favicon.ico":
-            self.respond_favicon(head_only=True)
+        path = urlparse(self.path).path
+        if path == "/favicon.ico" or path.startswith("/static/"):
+            self.respond_static(path.rsplit("/", 1)[-1], head_only=True)
         else:
             self.send_error(405)
 
@@ -182,7 +124,9 @@ class WebHandler(BaseHTTPRequestHandler):
         elif parsed.path == "/watchlist/cards":
             self.respond_json(watchlist_cards_payload())
         elif parsed.path == "/favicon.ico":
-            self.respond_favicon()
+            self.respond_static("favicon.ico")
+        elif parsed.path.startswith("/static/"):
+            self.respond_static(parsed.path.removeprefix("/static/"))
         else:
             self.send_error(404)
 
@@ -220,7 +164,9 @@ class WebHandler(BaseHTTPRequestHandler):
                 return
             self.respond(payload)
         except Exception as exc:
-            self.respond(page("Errore", f'<p class="error">{esc(exc)}</p><p><a href="/">Torna alla home</a></p>'), status=500)
+            self.respond(
+                page("Errore", f'<p class="error">{esc(exc)}</p><p><a href="/">Torna alla home</a></p>'), status=500
+            )
 
     def same_origin(self) -> bool:
         origin = self.headers.get("Origin")
@@ -251,15 +197,15 @@ class WebHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    def respond_favicon(self, *, head_only: bool = False) -> None:
-        try:
-            body = favicon_bytes()
-        except FileNotFoundError:
+    def respond_static(self, name: str, *, head_only: bool = False) -> None:
+        found = static_file(name)
+        if not found:
             self.send_error(404)
             return
+        body, content_type = found
         self.send_response(200)
-        self.send_header("Content-Type", "image/x-icon")
-        self.send_header("Cache-Control", "public, max-age=86400")
+        self.send_header("Content-Type", content_type)
+        self.send_header("Cache-Control", "no-cache")  # dopo un aggiornamento dell'app il browser li ricarica
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         if not head_only:

@@ -1,11 +1,15 @@
+"""Database SQLite locale: watchlist, preferiti e cronologia."""
+
 from __future__ import annotations
 
 import json
 import sqlite3
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, cast
+
+from aw_web.anime import Anime, anime_from_json
 
 # l'anime salvato vive tutto in anime_json: le colonne servono solo a chiave, progresso e ordine
 Table = Literal["watchlist", "favorites", "watch_history"]
@@ -50,12 +54,12 @@ CREATE_TABLE_STATEMENTS = (
 
 def db_timestamp(value: datetime) -> str:
     """Stesso formato di CURRENT_TIMESTAMP di SQLite (UTC, senza fuso)."""
-    return value.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+    return value.astimezone(UTC).strftime("%Y-%m-%d %H:%M:%S")
 
 
 def parse_db_timestamp(value: object) -> datetime | None:
     try:
-        return datetime.fromisoformat(str(value)).replace(tzinfo=timezone.utc) if value else None
+        return datetime.fromisoformat(str(value)).replace(tzinfo=UTC) if value else None
     except ValueError:
         return None
 
@@ -173,3 +177,29 @@ class WebDatabase:
     def mark_watch_item_episodes_checked(self, ref: str, checked_at: str) -> None:
         with self.connect() as conn:
             conn.execute("UPDATE watchlist SET episodes_checked_at = ? WHERE ref = ?", (checked_at, ref))
+
+
+class LazyDatabase:
+    def __init__(self) -> None:
+        self._database: WebDatabase | None = None
+
+    def _get_database(self) -> WebDatabase:
+        if self._database is None:
+            self._database = WebDatabase()
+        return self._database
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._get_database(), name)
+
+
+_DB = LazyDatabase()
+DB = cast(WebDatabase, _DB)  # creato al primo uso: i test cambiano HOME prima
+
+
+def reset_lazy_database() -> None:
+    _DB._database = None
+
+
+def saved_anime(item: dict[str, Any]) -> Anime:
+    """L'anime di una riga del database."""
+    return anime_from_json(str(item["anime_json"]))

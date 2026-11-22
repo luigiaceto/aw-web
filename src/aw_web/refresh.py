@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from aw_web.providers import Animeunity
-from aw_web.web.db import WebDatabase, db_timestamp, parse_db_timestamp
-from aw_web.web.utils import saved_anime
-
+from aw_web.animeunity import Animeunity
+from aw_web.db import WebDatabase, db_timestamp, parse_db_timestamp, saved_anime
 
 WATCHLIST_REFRESH_INTERVAL = timedelta(hours=6)
 
@@ -17,7 +15,7 @@ def should_refresh_watch_item(item: dict[str, Any], now: datetime | None = None)
     checked_at = parse_db_timestamp(item.get("episodes_checked_at"))
     if checked_at is None:
         return True
-    return (now or datetime.now(timezone.utc)) - checked_at >= WATCHLIST_REFRESH_INTERVAL
+    return (now or datetime.now(UTC)) - checked_at >= WATCHLIST_REFRESH_INTERVAL
 
 
 def refresh_watchlist_availability(
@@ -27,7 +25,7 @@ def refresh_watchlist_availability(
     *,
     now: datetime | None = None,
 ) -> None:
-    checked_at = now or datetime.now(timezone.utc)
+    checked_at = now or datetime.now(UTC)
     checked_at_value = db_timestamp(checked_at)
     for item in items:
         ref = str(item["ref"])

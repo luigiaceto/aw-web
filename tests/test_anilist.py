@@ -1,14 +1,12 @@
-"""Test delle liste AniList e dell'abbinamento con i risultati di AnimeUnity."""
+"""Test delle liste AniList."""
 
 from datetime import date
 
 import httpx
 
-from aw_web.anime import Anime
-from aw_web.services import anilist
-from aw_web.services.anilist import adjacent_season, current_season, ranked_anime, seasonal_anime
-from aw_web.services.matching import best_seasonal_match
-from tests.helpers import anilist_media, seasonal
+from aw_web import anilist
+from aw_web.anilist import adjacent_season, current_season, ranked_anime, seasonal_anime
+from tests.helpers import anilist_media
 
 
 def _fake_anilist(monkeypatch, pages: list[list[dict]]) -> list[dict]:
@@ -23,7 +21,7 @@ def _fake_anilist(monkeypatch, pages: list[list[dict]]) -> list[dict]:
 
     anilist._seasonal_anime.cache_clear()
     anilist._ranked_anime.cache_clear()
-    monkeypatch.setattr("aw_web.services.anilist.httpx.post", fake_post)
+    monkeypatch.setattr("aw_web.anilist.httpx.post", fake_post)
     return calls
 
 
@@ -64,55 +62,6 @@ def test_ranked_anime_uses_expected_anilist_sort(monkeypatch):
     assert [call["sort"] for call in calls] == [["TRENDING_DESC"], ["SCORE_DESC"]]
     assert popular[0].title == "Ranked Anime"
     assert top[0].average_score == 90
-
-
-def test_seasonal_match_keeps_the_sub_and_drops_its_dub(monkeypatch):
-    sub = Anime("Example Anime", "10")
-    dub = Anime("Example Anime (ITA)", "10-ita")
-
-    class FakeProvider:
-        def search(self, title):
-            return [sub, dub, Anime("Other Anime", "11")]
-
-    monkeypatch.setattr("aw_web.services.matching.PROVIDER", FakeProvider())
-
-    match, candidates = best_seasonal_match(seasonal(title="Example Anime"))
-
-    assert match is sub
-    assert dub not in candidates
-
-
-def test_seasonal_match_asks_when_two_anime_are_equally_close(monkeypatch):
-    second, third = Anime("Example Anime 2", "20"), Anime("Example Anime 3", "30")
-
-    class FakeProvider:
-        def search(self, title):
-            return [second, third]
-
-    monkeypatch.setattr("aw_web.services.matching.PROVIDER", FakeProvider())
-
-    match, candidates = best_seasonal_match(seasonal(title="Example Anime"))
-
-    assert match is None
-    assert candidates == [second, third]
-
-
-def test_seasonal_match_tries_numbered_title_variant(monkeypatch):
-    anime = Anime("Re:ZERO -Starting Life in Another World- 4", "provider-ref")
-    queries = []
-
-    class FakeProvider:
-        def search(self, title):
-            queries.append(title)
-            return [anime] if title == "Re:ZERO -Starting Life in Another World- 4" else []
-
-    monkeypatch.setattr("aw_web.services.matching.PROVIDER", FakeProvider())
-
-    match, candidates = best_seasonal_match(seasonal(title="Re:ZERO -Starting Life in Another World- Season 4"))
-
-    assert "Re:ZERO -Starting Life in Another World- 4" in queries
-    assert match == anime
-    assert candidates == [anime]
 
 
 def test_seasonal_title_variants_handle_both_season_forms():

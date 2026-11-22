@@ -4,44 +4,45 @@ from __future__ import annotations
 
 import json
 import threading
+from collections.abc import Callable
 from functools import partial
-from typing import Any, Callable
+from typing import Any
 
-from aw_web.providers import PROVIDER
-from aw_web.anime import Anime
-from aw_web.services.anilist import (
+from aw_web.anilist import (
     RANKED_LISTS,
     SeasonalAnime,
     adjacent_season,
     current_season,
+    normalize_ranked_list,
     normalize_season,
     ranked_anime,
     ranked_by_id,
-    normalize_ranked_list,
     ranked_list_label,
     seasonal_anime,
     seasonal_by_id,
     seasonal_label,
 )
-from aw_web.services.matching import best_seasonal_match
+from aw_web.anime import Anime
+from aw_web.animeunity import PROVIDER
+from aw_web.db import DB, saved_anime
+from aw_web.matching import best_seasonal_match
+from aw_web.refresh import refresh_watchlist_availability
 from aw_web.web.components import (
     anilist_card,
+    anime_url,
     card,
     collection_toggle,
     episode_play_form,
     episode_row,
+    esc,
     favorite_card,
     image_html,
     page,
     provider_match_card,
+    q,
     seasonal_card,
     watch_card,
-    watchlist_refresh_script,
 )
-from aw_web.web.state import DB
-from aw_web.web.utils import anime_url, esc, parse_int, provider_error, q, saved_anime
-from aw_web.web.watchlist_refresh import refresh_watchlist_availability
-
 
 HERO_SLIDE_SECONDS = 8
 HERO_FADE_SECONDS = 0.8
@@ -50,8 +51,21 @@ _WATCHLIST_REFRESH_LOCK = threading.Lock()
 _WATCHLIST_REFRESH_RUNNING = False
 
 
+def parse_int(value: object, default: int = 0) -> int:
+    """Intero da un parametro o da un campo JSON; None o testo non numerico danno `default`."""
+    try:
+        return int(value) if isinstance(value, (str, int, float)) else default
+    except ValueError:
+        return default
+
+
+def provider_error(exc: BaseException) -> str:
+    message = str(exc).strip()
+    return message or exc.__class__.__name__
+
+
 def redirect(location: str) -> bytes:
-    return f"REDIRECT:{location}".encode("utf-8")
+    return f"REDIRECT:{location}".encode()
 
 
 def start_watchlist_refresh(task: Callable[[], None]) -> None:
@@ -132,9 +146,7 @@ def render_home() -> bytes:
         latest_html = f'<p class="error">Impossibile caricare gli ultimi episodi: {esc(provider_error(exc))}</p>'
 
     watch_items = DB.items("watchlist")
-    start_watchlist_refresh(
-        partial(refresh_watchlist_availability, DB, watch_items, PROVIDER)
-    )
+    start_watchlist_refresh(partial(refresh_watchlist_availability, DB, watch_items, PROVIDER))
     watch_html = watch_cards_html(watch_items, latest)
 
     favorites_html = "".join(favorite_card(item) for item in DB.items("favorites"))
@@ -164,7 +176,6 @@ def render_home() -> bytes:
       <div class="section-title"><h2>Ultimi episodi</h2></div>
       <div class="rail">{latest_html}</div>
     </section>
-    {watchlist_refresh_script()}
     """
     return page("Home", body)
 
@@ -359,9 +370,7 @@ def render_anime(params: dict[str, list[str]]) -> bytes:
     history_item = DB.find("watch_history", anime.ref)
     current_episode = str((history_item or watch_item or {}).get("current_episode") or "0")
     info_rows = "".join(
-        f"<dt>{esc(key)}</dt><dd>{esc(value)}</dd>"
-        for key, value in anime.info.items()
-        if value and key != "Trama"
+        f"<dt>{esc(key)}</dt><dd>{esc(value)}</dd>" for key, value in anime.info.items() if value and key != "Trama"
     )
     plot = anime.info.get("Trama", "")
     episodes_html = "".join(episode_row(ep, current_episode) for ep in anime._episodes)
@@ -370,11 +379,7 @@ def render_anime(params: dict[str, list[str]]) -> bytes:
     else:
         message = episodes_error or "Nessun episodio disponibile."
         episodes_html = f'<p class="muted">{esc(message)}</p>'
-    warnings = "".join(
-        f'<p class="error">{esc(message)}</p>'
-        for message in (info_error, episodes_error)
-        if message
-    )
+    warnings = "".join(f'<p class="error">{esc(message)}</p>' for message in (info_error, episodes_error) if message)
 
     body = f"""
     <section class="detail">
@@ -388,7 +393,7 @@ def render_anime(params: dict[str, list[str]]) -> bytes:
           {collection_toggle(action="/watchlist/toggle", anime=anime, active=bool(watch_item), kind="watchlist", label="Rimuovi dalla watchlist" if watch_item else "Aggiungi alla watchlist")}
           {collection_toggle(action="/favorites/toggle", anime=anime, active=bool(favorite_item), kind="favorite", label="Rimuovi dai preferiti" if favorite_item else "Aggiungi ai preferiti")}
         </div>
-        {f'<p class="plot">{esc(plot)}</p>' if plot else ''}
+        {f'<p class="plot">{esc(plot)}</p>' if plot else ""}
         <dl class="info-list">{info_rows}</dl>
       </div>
     </section>

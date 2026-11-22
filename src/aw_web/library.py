@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Literal
 
 from aw_web.anime import Anime
-from aw_web.web.state import DB
+from aw_web.db import DB
 
 
 def toggle(table: Literal["watchlist", "favorites"], anime: Anime) -> None:

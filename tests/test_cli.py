@@ -1,7 +1,7 @@
 import sqlite3
 
-from aw_web.web.app import main, reset_database
-from aw_web.web.db import WebDatabase
+from aw_web.__main__ import main, reset_database
+from aw_web.db import WebDatabase
 
 
 def test_reset_database_moves_the_database_to_a_backup(tmp_path, monkeypatch):
@@ -21,7 +21,7 @@ def test_second_reset_keeps_the_first_backup(tmp_path, monkeypatch):
     db_path = tmp_path / "web.sqlite3"
     monkeypatch.setattr("builtins.input", lambda prompt: "yes")
     stamps = iter(["20260101-000000", "20260101-000001"])
-    monkeypatch.setattr("aw_web.web.app.time.strftime", lambda fmt: next(stamps))
+    monkeypatch.setattr("aw_web.__main__.time.strftime", lambda fmt: next(stamps))
 
     db_path.write_text("progress")
     reset_database(db_path)
@@ -68,7 +68,7 @@ def test_main_validates_database_before_starting_server(tmp_path, monkeypatch, c
         def serve_forever(self):
             return None
 
-    monkeypatch.setattr("aw_web.web.app.ThreadingHTTPServer", FakeServer)
+    monkeypatch.setattr("aw_web.__main__.ThreadingHTTPServer", FakeServer)
 
     main([])
 

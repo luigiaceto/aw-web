@@ -10,9 +10,6 @@ from typing import Any
 
 import httpx
 
-from aw_web.web.utils import parse_int
-
-
 SEASON_ORDER = ("WINTER", "SPRING", "SUMMER", "FALL")
 SEASON_LABELS = {
     "WINTER": "Inverno",
@@ -100,7 +97,8 @@ def seasonal_anime(year: int, season: str) -> tuple[SeasonalAnime, ...]:
 @lru_cache(maxsize=24)
 def _seasonal_anime(year: int, season: str, day: str) -> tuple[SeasonalAnime, ...]:
     """`day` fa parte della chiave di cache: le liste si aggiornano una volta al giorno."""
-    query = """
+    query = (
+        """
     query ($year: Int, $season: MediaSeason, $page: Int) {
       Page(page: $page, perPage: 50) {
         pageInfo { hasNextPage }
@@ -109,10 +107,13 @@ def _seasonal_anime(year: int, season: str, day: str) -> tuple[SeasonalAnime, ..
           seasonYear: $year,
           season: $season,
           sort: [POPULARITY_DESC, TRENDING_DESC]
-        ) {""" + _MEDIA_FIELDS + """        }
+        ) {"""
+        + _MEDIA_FIELDS
+        + """        }
       }
     }
     """
+    )
     return _fetch_media(query, {"year": year, "season": season}, max_pages=10)
 
 
@@ -121,16 +122,16 @@ def _seasonal_from_media(data: dict[str, Any]) -> SeasonalAnime:
     cover = data.get("coverImage") or {}
     romaji, english, native = (str(titles.get(key) or "") for key in ("romaji", "english", "native"))
     return SeasonalAnime(
-        anilist_id=parse_int(data.get("id")),
+        anilist_id=int(data.get("id") or 0),
         title=english or romaji or native,
         title_romaji=romaji,
         title_english=english,
         title_native=native,
         synonyms=tuple(str(synonym) for synonym in data.get("synonyms") or [] if synonym),
         cover_url=str(cover.get("extraLarge") or cover.get("large") or ""),
-        episodes=parse_int(data.get("episodes")),
+        episodes=int(data.get("episodes") or 0),
         genres=tuple(str(genre) for genre in (data.get("genres") or [])[:3]),
-        average_score=parse_int(data.get("averageScore")),
+        average_score=int(data.get("averageScore") or 0),
     )
 
 
@@ -191,17 +192,21 @@ def ranked_anime(slug: str) -> tuple[SeasonalAnime, ...]:
 def _ranked_anime(slug: str, day: str) -> tuple[SeasonalAnime, ...]:
     """`day` fa parte della chiave di cache: le liste si aggiornano una volta al giorno."""
     sort = str(RANKED_LISTS[slug]["sort"])
-    query = """
+    query = (
+        """
     query ($page: Int, $sort: [MediaSort]) {
       Page(page: $page, perPage: 50) {
         pageInfo { hasNextPage }
         media(
           type: ANIME,
           sort: $sort
-        ) {""" + _MEDIA_FIELDS + """        }
+        ) {"""
+        + _MEDIA_FIELDS
+        + """        }
       }
     }
     """
+    )
     return _fetch_media(query, {"sort": [sort]}, max_pages=2, limit=100)
 
 
@@ -215,9 +220,7 @@ def seasonal_title_variants(title: str) -> list[str]:
         return []
 
     variants = [clean]
-    match = re.search(
-        r"(?i)(?:[-:]\s*)?(?:(?:season|s)\s*(\d+)|(\d+)(?:st|nd|rd|th)\s+season)\s*$", clean
-    )
+    match = re.search(r"(?i)(?:[-:]\s*)?(?:(?:season|s)\s*(\d+)|(\d+)(?:st|nd|rd|th)\s+season)\s*$", clean)
     if match and (base := clean[: match.start()].strip(" -:")):
         number = match.group(1) or match.group(2)
         variants += [f"{base}- {number}", f"{base} {number}", base]

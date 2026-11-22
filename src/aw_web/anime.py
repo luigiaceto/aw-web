@@ -1,4 +1,8 @@
+"""Modello: anime, episodi e logica sugli episodi."""
+
 from __future__ import annotations
+
+import json
 from enum import Enum
 from functools import total_ordering
 
@@ -13,6 +17,7 @@ def episode_value(num: str) -> float:
 
 class AnimeStatus(Enum):
     """Enum for anime status, maintaining the original order."""
+
     ONGOING = "In corso"
     FINISHED = "Finito"
     NOT_RELEASED = "Non rilasciato"
@@ -21,6 +26,7 @@ class AnimeStatus(Enum):
     @classmethod
     def from_string(cls, status_str: str) -> AnimeStatus:
         return next((status for status in cls if status.value == status_str), cls.UNKNOWN)
+
 
 class Anime:
     """
@@ -56,7 +62,7 @@ class Anime:
         if self.anilist_id and other.anilist_id:
             return self.anilist_id == other.anilist_id
 
-        return self.name == other.name # idealmente andrebbe tolto
+        return self.name == other.name  # idealmente andrebbe tolto
 
     def __hash__(self) -> int:
         if self.anilist_id:
@@ -140,10 +146,7 @@ class Anime:
             Anime: l'oggetto Anime creato.
         """
         anime = Anime(
-            name=str(data["name"]),
-            ref=str(data["ref"]),
-            curr_ep=str(data["curr_ep"]),
-            last_ep=str(data["last_ep"])
+            name=str(data["name"]), ref=str(data["ref"]), curr_ep=str(data["curr_ep"]), last_ep=str(data["last_ep"])
         )
         id_anilist = data.get("id_anilist")
         status_str = str(data.get("status", "Sconosciuto"))
@@ -152,7 +155,7 @@ class Anime:
         anime.set_info(
             anilist_id=int(id_anilist) if isinstance(id_anilist, int) else 0,
             status=AnimeStatus.from_string(status_str),
-            info=dict(info) if isinstance(info, dict) else {}
+            info=dict(info) if isinstance(info, dict) else {},
         )
 
         episodes_data = data["episodes"] if isinstance(data["episodes"], list) else []
@@ -180,7 +183,7 @@ class Anime:
             "info": self.info,
             "cover_url": self.cover_url,
             "banner_url": self.banner_url,
-            "episodes": [ep.to_dict() for ep in self._episodes]
+            "episodes": [ep.to_dict() for ep in self._episodes],
         }
 
     @total_ordering
@@ -229,11 +232,7 @@ class Anime:
             Returns:
                 Anime.Episode: l'oggetto Episode creato.
             """
-            return cls(
-                anime,
-                num=str(data["num"]),
-                ref=str(data["ref"])
-            )
+            return cls(anime, num=str(data["num"]), ref=str(data["ref"]))
 
         def to_dict(self) -> dict[str, object]:
             """
@@ -245,4 +244,40 @@ class Anime:
             return {
                 "num": self.num,
                 "ref": self.ref,
-        }
+            }
+
+
+def anime_to_json(anime: Anime) -> str:
+    return json.dumps(anime.to_dict(), ensure_ascii=False)
+
+
+def anime_from_json(raw: str) -> Anime:
+    return Anime.from_dict(json.loads(raw))
+
+
+def episode_overview(anime: Anime, current_episode: str, latest: list[Anime]) -> tuple[str, str]:
+    """Ritorna (ultimo episodio disponibile, prossimo episodio da guardare)."""
+    current = episode_value(current_episode)
+    candidates = [
+        anime.curr_ep,
+        anime.last_ep,
+        *(ep.num for ep in anime._episodes),
+    ]
+
+    for latest_anime in latest:
+        if anime == latest_anime:
+            candidates.extend([latest_anime.curr_ep, latest_anime.last_ep])
+            candidates.extend(ep.num for ep in latest_anime._episodes)
+
+    last_available = max(candidates, key=episode_value, default="0")
+    if current_episode.isdigit() and last_available.isdigit():
+        next_number = int(current_episode) + 1
+        if next_number <= int(last_available):
+            candidates.append(str(next_number))
+
+    next_playable = min(
+        (candidate for candidate in candidates if episode_value(candidate) > current),
+        key=episode_value,
+        default=current_episode,
+    )
+    return last_available, next_playable

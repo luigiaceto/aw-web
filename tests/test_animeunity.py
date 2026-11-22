@@ -7,8 +7,7 @@ import httpx
 import pytest
 
 from aw_web.anime import Anime, AnimeStatus
-from aw_web.providers import ProviderError
-from aw_web.providers.animeunity import Animeunity, split_ref, stream_urls_from_html
+from aw_web.animeunity import Animeunity, ProviderError, split_ref, stream_urls_from_html, update_link
 
 ANIME = {
     "id": 4851,
@@ -186,3 +185,29 @@ def test_unexpected_responses_become_provider_errors():
 
     with pytest.raises(ProviderError, match="KeyError durante search"):
         _provider(handler).search("frieren")
+
+
+def test_update_link_uses_only_a_same_name_match():
+    anime = Anime("Example", "old-ref")
+
+    class FakeProvider:
+        def search(self, name):
+            return [Anime("Other Anime", "other-ref"), Anime("Example", "new-ref")]
+
+    result = update_link(FakeProvider(), lambda provider, target: target.ref, anime)
+
+    assert result == "new-ref"
+    assert anime.ref == "new-ref"
+
+
+def test_update_link_raises_when_no_result_has_the_same_name():
+    anime = Anime("Example", "old-ref")
+
+    class FakeProvider:
+        def search(self, name):
+            return [Anime("Other Anime", "other-ref")]
+
+    with pytest.raises(ProviderError, match="nessun risultato"):
+        update_link(FakeProvider(), lambda provider, target: None, anime)
+
+    assert anime.ref == "old-ref"

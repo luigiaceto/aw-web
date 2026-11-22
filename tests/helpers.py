@@ -2,9 +2,8 @@
 
 from typing import Any
 
-from aw_web.anime import Anime
-from aw_web.services.anilist import SeasonalAnime
-from aw_web.web.utils import anime_to_json
+from aw_web.anilist import SeasonalAnime
+from aw_web.anime import Anime, anime_to_json
 
 
 def seasonal(**overrides: Any) -> SeasonalAnime:

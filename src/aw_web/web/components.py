@@ -2,49 +2,32 @@
 
 from __future__ import annotations
 
-import json
+import html
 from typing import Any
+from urllib.parse import quote, urlencode
 
-from aw_web.anime import Anime, AnimeStatus
-from aw_web.web.state import CSRF_TOKEN
-from aw_web.web.styles import CSS
-from aw_web.anime import episode_value
-from aw_web.services.anilist import SeasonalAnime
-from aw_web.web.utils import anime_to_json, anime_url, episode_overview, esc, q, saved_anime
+from aw_web.anilist import SeasonalAnime
+from aw_web.anime import Anime, AnimeStatus, anime_to_json, episode_overview, episode_value
+from aw_web.db import saved_anime
+from aw_web.web import CSRF_TOKEN
+
+
+def esc(value: object) -> str:
+    return html.escape(str(value), quote=True)
+
+
+def q(value: object) -> str:
+    return quote(str(value), safe="")
+
+
+def anime_url(anime: Anime, *, saved: bool = False) -> str:
+    """Link alla pagina dettaglio: il resto lo carica la pagina da AnimeUnity."""
+    query = urlencode({"name": anime.name, "ref": anime.ref})
+    return f"/anime?saved=1&{query}" if saved else f"/anime?{query}"
 
 
 def csrf_input() -> str:
     return f'<input type="hidden" name="csrf_token" value="{esc(CSRF_TOKEN)}">'
-
-
-def watchlist_refresh_script() -> str:
-    """Aggiorna la sezione watchlist quando il refresh in background è finito."""
-    return """
-      <script>
-        (() => {
-          const rail = document.querySelector("#watchlist .rail");
-          if (!rail) return;
-          let polls = 0;
-          const poll = async () => {
-            let data;
-            try {
-              const response = await fetch("/watchlist/cards", {
-                credentials: "same-origin",
-                headers: { "Accept": "application/json" },
-              });
-              if (!response.ok) return;
-              data = await response.json();
-            } catch (error) {
-              return;
-            }
-            rail.innerHTML = data.html;
-            if (!data.refreshing || polls++ > 20) return;
-            window.setTimeout(poll, 1500);
-          };
-          window.setTimeout(poll, 1500);
-        })();
-      </script>
-    """
 
 
 def page(title: str, body: str) -> bytes:
@@ -56,7 +39,8 @@ def page(title: str, body: str) -> bytes:
       <meta name="viewport" content="width=device-width, initial-scale=1">
       <link rel="icon" href="/favicon.ico?v=1" sizes="any">
       <title>{esc(title)} - aw-web</title>
-      <style>{CSS}</style>
+      <link rel="stylesheet" href="/static/style.css">
+      <script src="/static/app.js" defer></script>
     </head>
     <body>
       <header class="topbar">
@@ -73,102 +57,6 @@ def page(title: str, body: str) -> bytes:
         </form>
       </header>
       <main>{body}</main>
-      <script>
-        (() => {{
-          function setPlayLoading(form, submitter) {{
-            const button = submitter || form.querySelector('button[type="submit"], button:not([type])');
-            if (!button || button.dataset.playLoading === "1") return null;
-            const state = {{
-              button,
-              disabled: button.disabled,
-              html: button.innerHTML,
-            }};
-            button.dataset.playLoading = "1";
-            button.style.setProperty("--loading-button-width", `${{button.offsetWidth}}px`);
-            button.disabled = true;
-            button.classList.add("is-loading");
-            button.setAttribute("aria-busy", "true");
-            button.innerHTML = '<span class="play-spinner" aria-hidden="true"></span><span class="sr-only">Apertura MPV...</span>';
-            return state;
-          }}
-
-          function restorePlayLoading(state) {{
-            if (!state) return;
-            state.button.disabled = state.disabled;
-            state.button.classList.remove("is-loading");
-            state.button.removeAttribute("aria-busy");
-            state.button.removeAttribute("data-play-loading");
-            state.button.style.removeProperty("--loading-button-width");
-            state.button.innerHTML = state.html;
-          }}
-
-          function delay(ms) {{
-            return new Promise((resolve) => window.setTimeout(resolve, ms));
-          }}
-
-          function showPlaybackError(message) {{
-            window.alert(message || "Impossibile aprire MPV.");
-          }}
-
-          async function waitForPlayback(payload) {{
-            if (!payload.status_url) return payload.redirect;
-            const startedAt = Date.now();
-            while (Date.now() - startedAt < 60000) {{
-              await delay(400);
-              const response = await fetch(payload.status_url, {{
-                credentials: "same-origin",
-                headers: {{ "Accept": "application/json" }},
-              }});
-              if (!response.ok) throw new Error("Impossibile controllare lo stato di MPV.");
-              const status = await response.json();
-              if (status.status === "ready") return status.redirect || payload.redirect;
-              if (status.status === "error") throw new Error(status.error || "Impossibile aprire MPV.");
-            }}
-            throw new Error("Timeout durante l'apertura di MPV.");
-          }}
-
-          async function submitPlayForm(form, submitter) {{
-            // prima di setPlayLoading: un bottone disabilitato non entra nel FormData
-            const body = new URLSearchParams(new FormData(form, submitter));
-            const state = setPlayLoading(form, submitter);
-            try {{
-              const response = await fetch("/play/start", {{
-                method: "POST",
-                body,
-                credentials: "same-origin",
-                headers: {{
-                  "Accept": "application/json",
-                }},
-              }});
-              if (!response.ok) {{
-                const html = await response.text();
-                document.open();
-                document.write(html);
-                document.close();
-                return;
-              }}
-              const payload = await response.json();
-              const redirect = await waitForPlayback(payload);
-              if (redirect) {{
-                window.location.assign(redirect);
-                return;
-              }}
-            }} catch (error) {{
-              console.error("Errore apertura MPV", error);
-              showPlaybackError(error instanceof Error ? error.message : "");
-            }}
-            restorePlayLoading(state);
-          }}
-
-          document.addEventListener("submit", (event) => {{
-            const form = event.target;
-            if (!(form instanceof HTMLFormElement)) return;
-            if (form.getAttribute("action") !== "/play") return;
-            event.preventDefault();
-            submitPlayForm(form, event.submitter);
-          }}, true);
-        }})();
-      </script>
     </body>
     </html>
     """
@@ -260,10 +148,10 @@ def _catalog_card(
         <div class="hover-copy">
           <div class="badge-row">{badges}</div>
           <h3>{esc(title)}</h3>
-          <p class="hover-meta">{esc(meta) if meta else 'Scheda anime'}</p>
+          <p class="hover-meta">{esc(meta) if meta else "Scheda anime"}</p>
           {description_html}
         </div>
-        {f'<div class="hover-actions">{actions}</div>' if actions else ''}
+        {f'<div class="hover-actions">{actions}</div>' if actions else ""}
       </div>
     </article>
     """
@@ -292,18 +180,17 @@ def card(anime: Anime, badge: str = "") -> str:
 
 
 def _anilist_meta(item: SeasonalAnime) -> str:
-    return _meta_text([
-        ", ".join(item.genres),
-        f"{item.episodes} ep." if item.episodes else "",
-        f"Voto AniList {item.average_score}%" if item.average_score else "",
-    ])
+    return _meta_text(
+        [
+            ", ".join(item.genres),
+            f"{item.episodes} ep." if item.episodes else "",
+            f"Voto AniList {item.average_score}%" if item.average_score else "",
+        ]
+    )
 
 
 def seasonal_card(item: SeasonalAnime, year: int, season: str) -> str:
-    href = (
-        f"/stagionali/apri?year={q(year)}&season={q(season)}"
-        f"&anilist_id={q(item.anilist_id)}"
-    )
+    href = f"/stagionali/apri?year={q(year)}&season={q(season)}&anilist_id={q(item.anilist_id)}"
     return _catalog_card(
         title=item.title,
         href=href,
@@ -351,7 +238,7 @@ def collection_toggle(
     <form class="icon-toggle-form" action="{esc(action)}" method="post">
       {csrf_input()}
       <input type="hidden" name="anime" value="{esc(anime_to_json(anime))}">
-      <button class="icon-toggle {'active' if active else ''}" type="submit" aria-label="{esc(label)}" title="{esc(label)}">
+      <button class="icon-toggle {"active" if active else ""}" type="submit" aria-label="{esc(label)}" title="{esc(label)}">
         {icon}
       </button>
     </form>
@@ -423,10 +310,9 @@ def watch_card(item: dict[str, Any], latest: list[Anime]) -> str:
     badges = _pill("Watchlist")
     if episode_value(last_episode) > episode_value(current_episode):
         badges += _pill("Nuovo episodio", "new-episode")
-    actions = (
-        _play_form_action(anime, playable_episode, "Inizia" if current_episode == "0" else "Riprendi")
-        + _remove_form("/watchlist/remove", anime.ref, "Rimuovi dalla watchlist")
-    )
+    actions = _play_form_action(
+        anime, playable_episode, "Inizia" if current_episode == "0" else "Riprendi"
+    ) + _remove_form("/watchlist/remove", anime.ref, "Rimuovi dalla watchlist")
     return _catalog_card(
         title=anime.name,
         href=anime_url(anime, saved=True),
@@ -455,7 +341,7 @@ def episode_row(episode: Anime.Episode, current_episode: str) -> str:
     <div class="episode{active}">
       <div>
         <strong>Ep. {esc(episode.num)}</strong>
-        {('<span class="badge">ultimo visto</span>' if active else '')}
+        {('<span class="badge">ultimo visto</span>' if active else "")}
       </div>
       <div class="row-actions compact">
         <button form="play-form" name="episode" value="{esc(episode.num)}">Guarda</button>

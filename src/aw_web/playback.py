@@ -1,4 +1,4 @@
-"""Media URL validation and external player helpers."""
+"""Apertura degli episodi in MPV, anche in background con job di cui leggere lo stato."""
 
 from __future__ import annotations
 
@@ -7,16 +7,17 @@ import os
 import shutil
 import socket
 import subprocess
+import threading
 import time
 import uuid
+from dataclasses import dataclass, field
 from ipaddress import ip_address
 from pathlib import Path
 from urllib.parse import urlparse
 
 from aw_web.anime import Anime
-from aw_web.services.collections import save_watch_progress
-from aw_web.providers import PROVIDER
-
+from aw_web.animeunity import PROVIDER
+from aw_web.library import save_watch_progress
 
 _BLOCKED_HOSTS = {"localhost"}
 _HOMEBREW_MPV_PATHS = ("/opt/homebrew/bin/mpv", "/usr/local/bin/mpv")
@@ -138,7 +139,7 @@ def _read_until_mpv_ready(client: socket.socket, process: subprocess.Popen[bytes
         client.settimeout(max(0.05, min(0.25, deadline - now)))
         try:
             chunk = client.recv(4096)
-        except socket.timeout:
+        except TimeoutError:
             continue
         if not chunk:
             return False
@@ -171,7 +172,7 @@ def _wait_for_mpv_ready(
             with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
                 client.connect(ipc_path)
                 return _read_until_mpv_ready(client, process, url, deadline)
-        except (FileNotFoundError, ConnectionRefusedError, socket.timeout, OSError):
+        except (TimeoutError, FileNotFoundError, ConnectionRefusedError, OSError):
             time.sleep(0.05)
 
     if process.poll() is not None:
@@ -216,3 +217,49 @@ def play_episode(anime: Anime, episode_num: str) -> None:
     url = PROVIDER.episode_link(anime, episode)
     open_external_player(url, str(episode))
     save_watch_progress(anime, episode)
+
+
+JOB_TIMEOUT_SECONDS = 60.0
+JOB_RETENTION_SECONDS = 300.0
+
+
+@dataclass
+class PlaybackJob:
+    status: str = "pending"  # pending -> ready | error
+    error: str = ""
+    created_at: float = field(default_factory=time.monotonic)
+
+
+_JOBS: dict[str, PlaybackJob] = {}
+_JOBS_LOCK = threading.Lock()
+
+
+def start_job(anime: Anime, episode_num: str) -> str:
+    """Apre l'episodio in background: la pagina non resta bloccata finché MPV non parte."""
+    job_id = uuid.uuid4().hex
+    with _JOBS_LOCK:
+        now = time.monotonic()
+        for old_id in [key for key, job in _JOBS.items() if now - job.created_at > JOB_RETENTION_SECONDS]:
+            del _JOBS[old_id]
+        _JOBS[job_id] = PlaybackJob()
+    threading.Thread(target=run_job, args=(job_id, anime, episode_num), daemon=True).start()
+    return job_id
+
+
+def run_job(job_id: str, anime: Anime, episode_num: str) -> None:
+    try:
+        play_episode(anime, episode_num)
+        status, error = "ready", ""
+    except Exception as exc:
+        status, error = "error", str(exc)
+    with _JOBS_LOCK:
+        if job := _JOBS.get(job_id):
+            job.status, job.error = status, error
+
+
+def job_status(job_id: str) -> PlaybackJob | None:
+    with _JOBS_LOCK:
+        job = _JOBS.get(job_id)
+        if job and job.status == "pending" and time.monotonic() - job.created_at > JOB_TIMEOUT_SECONDS:
+            job.status, job.error = "error", "Timeout durante l'apertura di MPV."
+        return job

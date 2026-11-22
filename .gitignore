@@ -94,3 +94,6 @@ TODO.md
 tests/fixtures/
 .DS_Store
 .uv-cache
+
+# Database e HOME isolati usati dall'anteprima di Claude Code (.claude/launch.json)
+.dev-home/

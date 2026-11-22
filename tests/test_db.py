@@ -3,8 +3,7 @@ import sqlite3
 import pytest
 
 from aw_web.anime import Anime
-from aw_web.web.utils import saved_anime
-from aw_web.web.db import CREATE_TABLE_STATEMENTS, WebDatabase, prepare_database, validate_database_schema
+from aw_web.db import CREATE_TABLE_STATEMENTS, WebDatabase, prepare_database, saved_anime, validate_database_schema
 
 WATCHLIST_SQL = CREATE_TABLE_STATEMENTS[0]
 

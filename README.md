@@ -13,6 +13,7 @@
 - [Features](#features)
 - [Watchlist, Preferiti e Database](#watchlist-preferiti-e-database)
 - [Player MPV](#player-mpv)
+- [Sviluppo](#sviluppo)
 
 ## Installazione su MacOS (unico OS supportato e testato attualmente)
 
@@ -117,6 +118,30 @@ Watchlist, preferiti e cronologia degli episodi visti vengono salvati in un data
 `aw-web` usa il browser come interfaccia di navigazione e MPV come player video.
 
 Quando clicchi `Guarda`, la WebApp risolve il link dell'episodio e lo apre in MPV.
+
+## Sviluppo
+
+Dalla cartella del progetto, con `uv`:
+
+```bash
+uv run aw-web             # avvia l'app dal codice locale
+uv run pytest             # test
+uv run pyright            # controllo dei tipi
+uv run ruff check         # lint
+uv run ruff format        # formattazione
+```
+
+Struttura del pacchetto `src/aw_web/`:
+
+- `anime.py`: modello (anime, episodi, episodio da riprendere);
+- `animeunity.py`: collegamento con AnimeUnity, l'unico provider;
+- `anilist.py`, `matching.py`: liste AniList e abbinamento con AnimeUnity;
+- `library.py`, `refresh.py`, `db.py`: watchlist, preferiti, cronologia e database SQLite;
+- `playback.py`: apertura degli episodi in MPV;
+- `web/`: server HTTP, pagine, componenti HTML e file statici (CSS, JS);
+- `__main__.py`: riga di comando (`aw-web`, `aw-web --reset-db`).
+
+I test in `tests/` hanno lo stesso ordine: un file per modulo.
 
 ## Report di Bug e Problemi Vari
 

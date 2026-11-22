@@ -1,4 +1,4 @@
-"""Entrypoint that starts the local aw-web server."""
+"""Riga di comando: `aw-web` avvia l'app, `aw-web --reset-db` resetta il database."""
 
 from __future__ import annotations
 
@@ -8,15 +8,15 @@ import signal
 import sys
 import time
 import webbrowser
+from collections.abc import Sequence
 from http.server import ThreadingHTTPServer
 from pathlib import Path
-from typing import Sequence
 
-from aw_web.web.db import default_db_path, prepare_database
+from aw_web.db import default_db_path, prepare_database
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Avvia l'interfaccia web locale di aw-web.")
+    parser = argparse.ArgumentParser(prog="aw-web", description="Avvia l'interfaccia web locale di aw-web.")
     parser.add_argument(
         "--reset-db",
         action="store_true",
@@ -63,8 +63,8 @@ def main(argv: Sequence[str] | None = None) -> None:
         print("Esegui aw-web --reset-db per resettare il database locale")
         sys.exit(1)
 
+    from aw_web.web import HOST, PORT
     from aw_web.web.server import WebHandler
-    from aw_web.web.state import HOST, PORT
 
     server = ThreadingHTTPServer((HOST, PORT), WebHandler)
     url = f"http://{HOST}:{PORT}"
