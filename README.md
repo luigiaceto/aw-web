@@ -84,19 +84,19 @@ Dalla home dell'app puoi:
 - vedere il badge `Nuovo episodio` quando esiste un episodio successivo all'ultimo visto.
 
 > [!NOTE]
-> aw-web si appoggia ad AniList per poter recuperare le copertine, banner, liste, stagioni di ogni anime, dunque se si hanno problemi nell'accedere alle pagine STAGIONALI, POPOLARI, TOP-100 con errore HTTP 403 è probabile che la causa derivi proprio da AniList che potrebbe aver temporaneamente sospeso il servizio.
+> aw-web si appoggia ad AniList per le liste STAGIONALI, POPOLARI e TOP-100, dunque se si hanno problemi nell'accedere alle pagine STAGIONALI, POPOLARI, TOP-100 con errore HTTP 403 è probabile che la causa derivi proprio da AniList che potrebbe aver temporaneamente sospeso il servizio.
 
 Nella pagina di un anime puoi:
 
 - leggere info e trama;
-- vedere la copertina recuperata da AniList;
+- vedere la copertina dell'anime;
 - aggiungere o rimuovere l'anime dalla watchlist con il pulsante segnalibro;
 - aggiungere o rimuovere l'anime dai preferiti con il pulsante cuore;
 - scegliere un episodio ed aprirlo in MPV.
 
 ## Watchlist, Preferiti e Database
 
-Watchlist, preferiti e cache delle copertine degli anime vengono salvati in un database SQLite locale dentro:
+Watchlist, preferiti e cronologia degli episodi visti vengono salvati in un database SQLite locale dentro:
 
 ```text
 ~/.aw-web/web.sqlite3
@@ -109,7 +109,7 @@ Watchlist, preferiti e cache delle copertine degli anime vengono salvati in un d
 > aw-web --reset-db
 > ```
 >
-> Al prossimo avvio dell'app verrà dunque ricreato il database. Il file precedente non viene eliminato: viene rinominato in `~/.aw-web/web.sqlite3.bak`, quindi i progressi restano recuperabili a mano. Lo sviluppatore si impegna a minimizzare i cambiamenti apportati alla firma del database.
+> Al prossimo avvio dell'app verrà dunque ricreato il database. Il file precedente non viene eliminato: viene rinominato in `~/.aw-web/web.sqlite3.<data-ora>.bak` (un file per ogni reset), quindi i progressi restano recuperabili a mano. Lo sviluppatore si impegna a minimizzare i cambiamenti apportati alla firma del database.
 > Si consiglia quindi di non fare affidamente esclusivamente su quest'app per tenere traccia della propria watchlist.
 
 ## Player MPV

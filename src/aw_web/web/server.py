@@ -11,18 +11,14 @@ from dataclasses import dataclass, field
 from importlib.resources import files
 from http.server import BaseHTTPRequestHandler
 from secrets import compare_digest
+from typing import Literal
 from urllib.parse import parse_qs, urlparse
 
 from aw_web.anime import Anime
-from aw_web.services.collections import (
-    remove_favorite_item,
-    remove_watch_item,
-    toggle_favorite,
-    toggle_watchlist,
-)
+from aw_web.services.collections import toggle
 from aw_web.services.playback import play_episode
 from aw_web.web.components import page
-from aw_web.web.state import CSRF_TOKEN, HOST, PORT
+from aw_web.web.state import CSRF_TOKEN, DB, HOST, PORT
 from aw_web.web.utils import anime_from_json, anime_url, esc, q
 from aw_web.web.views import (
     redirect,
@@ -59,39 +55,14 @@ def favicon_bytes() -> bytes:
     return files("aw_web.web").joinpath("static/favicon.ico").read_bytes()
 
 
-def handle_toggle_watchlist(fields: dict[str, list[str]]) -> bytes:
-    provider_name = fields.get("provider", [""])[0]
+def handle_toggle(table: Literal["watchlist", "favorites"], fields: dict[str, list[str]]) -> bytes:
     anime = anime_from_json(fields.get("anime", ["{}"])[0])
-    toggle_watchlist(
-        provider_name,
-        anime,
-        fields.get("cover_url", [""])[0],
-        fields.get("banner_url", [""])[0],
-    )
-    return redirect(anime_url(provider_name, anime))
+    toggle(table, anime)
+    return redirect(anime_url(anime))
 
 
-def handle_toggle_favorite(fields: dict[str, list[str]]) -> bytes:
-    provider_name = fields.get("provider", [""])[0]
-    anime = anime_from_json(fields.get("anime", ["{}"])[0])
-    toggle_favorite(
-        provider_name,
-        anime,
-        fields.get("cover_url", [""])[0],
-        fields.get("banner_url", [""])[0],
-    )
-    return redirect(anime_url(provider_name, anime))
-
-
-def handle_remove_watchlist(fields: dict[str, list[str]]) -> bytes:
-    item_id = int(fields.get("id", ["0"])[0] or 0)
-    remove_watch_item(item_id)
-    return redirect("/")
-
-
-def handle_remove_favorite(fields: dict[str, list[str]]) -> bytes:
-    item_id = int(fields.get("id", ["0"])[0] or 0)
-    remove_favorite_item(item_id)
+def handle_remove(table: Literal["watchlist", "favorites"], fields: dict[str, list[str]]) -> bytes:
+    DB.remove(table, fields.get("ref", [""])[0])
     return redirect("/")
 
 
@@ -99,24 +70,22 @@ def handle_play(fields: dict[str, list[str]]) -> bytes:
     return redirect(play_redirect_url(fields))
 
 
-def play_request(fields: dict[str, list[str]]) -> tuple[str, Anime, str]:
-    provider_name = fields.get("provider", [""])[0]
-    anime_values = fields.get("anime", ["{}"])
-    anime = anime_from_json(anime_values[0])
+def play_request(fields: dict[str, list[str]]) -> tuple[Anime, str]:
+    anime = anime_from_json(fields.get("anime", ["{}"])[0])
     episode_num = fields.get("episode", [anime.curr_ep])[0]
-    return provider_name, anime, episode_num
+    return anime, episode_num
 
 
 def play_redirect_url(fields: dict[str, list[str]]) -> str:
-    provider_name, anime, episode_num = play_request(fields)
-    play_episode(provider_name, anime, episode_num)
-    return anime_url(provider_name, anime)
+    anime, episode_num = play_request(fields)
+    play_episode(anime, episode_num)
+    return anime_url(anime)
 
 
 def handle_play_start(fields: dict[str, list[str]]) -> bytes:
-    provider_name, anime, episode_num = play_request(fields)
+    anime, episode_num = play_request(fields)
     job_id = uuid.uuid4().hex
-    redirect_url = anime_url(provider_name, anime)
+    redirect_url = anime_url(anime)
     with PLAYBACK_JOBS_LOCK:
         now = time.monotonic()
         for old_id in [
@@ -125,7 +94,7 @@ def handle_play_start(fields: dict[str, list[str]]) -> bytes:
         ]:
             del PLAYBACK_JOBS[old_id]
         PLAYBACK_JOBS[job_id] = PlaybackJob(redirect=redirect_url)
-    start_playback_job(job_id, provider_name, anime, episode_num)
+    start_playback_job(job_id, anime, episode_num)
     return json.dumps(
         {
             "job_id": job_id,
@@ -135,18 +104,18 @@ def handle_play_start(fields: dict[str, list[str]]) -> bytes:
     ).encode("utf-8")
 
 
-def start_playback_job(job_id: str, provider_name: str, anime: Anime, episode_num: str) -> None:
+def start_playback_job(job_id: str, anime: Anime, episode_num: str) -> None:
     thread = threading.Thread(
         target=run_playback_job,
-        args=(job_id, provider_name, anime, episode_num),
+        args=(job_id, anime, episode_num),
         daemon=True,
     )
     thread.start()
 
 
-def run_playback_job(job_id: str, provider_name: str, anime: Anime, episode_num: str) -> None:
+def run_playback_job(job_id: str, anime: Anime, episode_num: str) -> None:
     try:
-        play_episode(provider_name, anime, episode_num)
+        play_episode(anime, episode_num)
     except Exception as exc:
         with PLAYBACK_JOBS_LOCK:
             if job := PLAYBACK_JOBS.get(job_id):
@@ -234,13 +203,13 @@ class WebHandler(BaseHTTPRequestHandler):
             return
         try:
             if parsed.path == "/watchlist/toggle":
-                payload = handle_toggle_watchlist(fields)
+                payload = handle_toggle("watchlist", fields)
             elif parsed.path == "/watchlist/remove":
-                payload = handle_remove_watchlist(fields)
+                payload = handle_remove("watchlist", fields)
             elif parsed.path == "/favorites/toggle":
-                payload = handle_toggle_favorite(fields)
+                payload = handle_toggle("favorites", fields)
             elif parsed.path == "/favorites/remove":
-                payload = handle_remove_favorite(fields)
+                payload = handle_remove("favorites", fields)
             elif parsed.path == "/play":
                 payload = handle_play(fields)
             elif parsed.path == "/play/start":
@@ -275,8 +244,8 @@ class WebHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    def respond_json(self, body: bytes, status: int = 200) -> None:
-        self.send_response(status)
+    def respond_json(self, body: bytes) -> None:
+        self.send_response(200)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()

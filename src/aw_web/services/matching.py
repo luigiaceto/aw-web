@@ -6,26 +6,26 @@ from difflib import SequenceMatcher
 
 from aw_web.anime import Anime
 from aw_web.services.anilist import SeasonalAnime
-from aw_web.services.providers import get_provider
+from aw_web.providers import PROVIDER
+from aw_web.providers.animeunity import split_ref
 
 
-def find_seasonal_matches(provider_name: str, seasonal: SeasonalAnime) -> list[Anime]:
-    provider = get_provider(provider_name)
+def find_seasonal_matches(seasonal: SeasonalAnime) -> list[Anime]:
     found: list[Anime] = []
     for title in seasonal.search_titles[:5]:
         try:
-            for anime in provider.search(title):
+            for anime in PROVIDER.search(title):
                 if not any(_same_provider_result(anime, existing) for existing in found):
                     found.append(anime)
         except Exception:
             continue
-        if any(_is_exact_seasonal_match(anime, seasonal) for anime in found):
+        if any(_seasonal_match_score(anime, seasonal) >= 1.0 for anime in found):
             break
     return sorted(found, key=lambda anime: _seasonal_match_score(anime, seasonal), reverse=True)[:6]
 
 
-def best_seasonal_match(provider_name: str, seasonal: SeasonalAnime) -> tuple[Anime | None, list[Anime]]:
-    matches = find_seasonal_matches(provider_name, seasonal)
+def best_seasonal_match(seasonal: SeasonalAnime) -> tuple[Anime | None, list[Anime]]:
+    matches = find_seasonal_matches(seasonal)
     if not matches:
         return None, []
     best = matches[0]
@@ -37,16 +37,11 @@ def best_seasonal_match(provider_name: str, seasonal: SeasonalAnime) -> tuple[An
 
 
 def _same_provider_result(first: Anime, second: Anime) -> bool:
-    return first.ref == second.ref or first == second
-
-
-def _is_exact_seasonal_match(anime: Anime, seasonal: SeasonalAnime) -> bool:
-    return bool(anime.anilist_id and anime.anilist_id == seasonal.anilist_id)
+    # sub e doppiaggio sono lo stesso anime: la ricerca mette prima il sub, che resta
+    return split_ref(first.ref)[0] == split_ref(second.ref)[0]
 
 
 def _seasonal_match_score(anime: Anime, seasonal: SeasonalAnime) -> float:
-    if _is_exact_seasonal_match(anime, seasonal):
-        return 1.0
     anime_title = _normalize_title(anime.name)
     scores = [
         SequenceMatcher(None, anime_title, _normalize_title(title)).ratio()

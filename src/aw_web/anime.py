@@ -3,6 +3,14 @@ from enum import Enum
 from functools import total_ordering
 
 
+def episode_value(num: str) -> float:
+    """Numero dell'episodio per ordinare e confrontare: "1-12" vale 12, un numero non valido 0."""
+    try:
+        return float(num.split("-")[-1])
+    except ValueError:
+        return 0
+
+
 class AnimeStatus(Enum):
     """Enum for anime status, maintaining the original order."""
     ONGOING = "In corso"
@@ -12,15 +20,7 @@ class AnimeStatus(Enum):
 
     @classmethod
     def from_string(cls, status_str: str) -> AnimeStatus:
-        match status_str:
-            case "In corso":
-                return cls.ONGOING
-            case "Finito":
-                return cls.FINISHED
-            case "Non rilasciato":
-                return cls.NOT_RELEASED
-            case _:
-                return cls.UNKNOWN
+        return next((status for status in cls if status.value == status_str), cls.UNKNOWN)
 
 class Anime:
     """
@@ -36,16 +36,18 @@ class Anime:
         info (dict[str, str]): dizionario con le informazioni dell'anime.
     """
 
-    def __init__(self, name: str, ref: str, curr_ep: str = "0", last_ep: str = "0", status: AnimeStatus = AnimeStatus.UNKNOWN) -> None:
+    def __init__(self, name: str, ref: str, curr_ep: str = "0", last_ep: str = "0") -> None:
         self.name: str = name
         self.ref: str = ref
         self.anilist_id: int = 0
         self.curr_ep: str = curr_ep
         self.last_ep: str = last_ep if last_ep != "0" else curr_ep
-        self.status: AnimeStatus = status
+        self.status: AnimeStatus = AnimeStatus.UNKNOWN
         self._episodes: list[Anime.Episode] = []
         self._num_to_index: dict[str, int] = {}
         self.info: dict[str, str] = {}
+        self.cover_url: str = ""
+        self.banner_url: str = ""
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, Anime):
@@ -62,15 +64,13 @@ class Anime:
 
         return hash(self.name)
 
-    def update_episodes(self, episodes: dict[str, str] | None = None, specials: bool = True) -> None:
+    def update_episodes(self, episodes: dict[str, str] | None = None) -> None:
         """
-        Imposta i riferimenti degli episodi dell'anime.
-        Args:
-            episodes (dict[str, str]): dizionario dei riferimenti degli episodi dell'anime (numero->URL/ID).
+        Imposta i riferimenti degli episodi dell'anime (numero -> id del video).
+        Gli speciali (episodi .5 e 0) restano fuori dalla lista.
         """
-        episodes = episodes or {}
-        for num, ref in episodes.items():
-            if not specials and ("." in num or num == "0"):
+        for num, ref in (episodes or {}).items():
+            if "." in num or num == "0":
                 continue
             if self.has_episode(num):
                 self.episode(num).ref = ref
@@ -128,34 +128,6 @@ class Anime:
         self.info = info
         self.status = status
 
-    def effective_episodes_count(self) -> int:
-        """
-        Calcola il numero totale effettivo di episodi, ignorando gli speciali (.5)
-        e scompattando i batch (es. 1-12 conta come 12 episodi).
-        """
-        total = 0
-        for ep in self.episodes():
-            if '.' in ep:
-                continue
-            if '-' in ep:
-                parts = ep.split('-')
-                if len(parts) == 2 and parts[0].isdigit() and parts[1].isdigit():
-                    total += (int(parts[1]) - int(parts[0]) + 1)
-                else:
-                    total += 1
-            else:
-                total += 1
-        return total
-
-    def has_all_episodes(self) -> bool:
-        """
-        Verifica se l'anime ha già in memoria tutti gli episodi noti per essere stati rilasciati.
-        """
-        try:
-            return self.effective_episodes_count() >= int(self.last_ep)
-        except ValueError:
-            return False
-
     @classmethod
     def from_dict(cls, data: dict[str, object]) -> Anime:
         """
@@ -186,6 +158,8 @@ class Anime:
         episodes_data = data["episodes"] if isinstance(data["episodes"], list) else []
         anime._episodes = [Anime.Episode.from_dict(anime, ep) for ep in episodes_data]
         anime.update_episodes()
+        anime.cover_url = str(data.get("cover_url") or "")
+        anime.banner_url = str(data.get("banner_url") or "")
 
         return anime
 
@@ -204,6 +178,8 @@ class Anime:
             "id_anilist": self.anilist_id,
             "status": self.status.value,
             "info": self.info,
+            "cover_url": self.cover_url,
+            "banner_url": self.banner_url,
             "episodes": [ep.to_dict() for ep in self._episodes]
         }
 
@@ -239,25 +215,7 @@ class Anime:
         def __lt__(self, other: object) -> bool:
             if not isinstance(other, Anime.Episode) or self._anime != other._anime:
                 return False
-            self_num = self.numeric() if '-' in self.num else float(self.num)
-            other_num = other.numeric() if '-' in other.num else float(other.num)
-            return self_num < other_num
-
-        def numeric(self) -> int:
-            """
-            Restituisce il numero dell'episodio come intero.
-
-            - se è x.5 arrotonda a x.
-            - se è x-y restituisce y.
-
-            Returns:
-                int: il numero dell'episodio.
-            """
-            if '.' in self.num:
-                return int(self.num.split('.')[0])
-            if '-' in self.num:
-                return int(self.num.split('-')[1])
-            return int(self.num)
+            return episode_value(self.num) < episode_value(other.num)
 
         @classmethod
         def from_dict(cls, anime: Anime, data: dict[str, object]) -> Anime.Episode:

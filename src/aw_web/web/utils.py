@@ -7,7 +7,7 @@ import json
 from typing import Any
 from urllib.parse import quote, urlencode
 
-from aw_web.anime import Anime
+from aw_web.anime import Anime, episode_value
 
 
 def esc(value: object) -> str:
@@ -19,13 +19,10 @@ def q(value: object) -> str:
 
 
 def parse_int(value: object, default: int = 0) -> int:
-    if value is None:
-        return default
-    if not isinstance(value, (str, int, float)):
-        return default
+    """Intero da un parametro o da un campo JSON; None o testo non numerico danno `default`."""
     try:
-        return int(value)
-    except (TypeError, ValueError):
+        return int(value) if isinstance(value, (str, int, float)) else default
+    except ValueError:
         return default
 
 
@@ -37,43 +34,26 @@ def anime_from_json(raw: str) -> Anime:
     return Anime.from_dict(json.loads(raw))
 
 
+def saved_anime(item: dict[str, Any]) -> Anime:
+    """L'anime di una riga del database."""
+    return anime_from_json(str(item["anime_json"]))
+
+
 def provider_error(exc: BaseException) -> str:
     message = str(exc).strip()
     return message or exc.__class__.__name__
 
 
-def episode_value(value: str) -> float:
-    try:
-        if "-" in value:
-            return float(value.split("-")[-1])
-        return float(value)
-    except ValueError:
-        return 0
-
-
-def anime_url(provider: str, anime: Anime, *, saved: bool = False) -> str:
-    """Link alla pagina dettaglio dell'anime."""
-    query = urlencode(
-        {
-            "provider": provider,
-            "name": anime.name,
-            "ref": anime.ref,
-            "curr_ep": anime.curr_ep,
-            "last_ep": anime.last_ep,
-            "anilist_id": anime.anilist_id,
-        }
-    )
+def anime_url(anime: Anime, *, saved: bool = False) -> str:
+    """Link alla pagina dettaglio: il resto lo carica la pagina da AnimeUnity."""
+    query = urlencode({"name": anime.name, "ref": anime.ref})
     return f"/anime?saved=1&{query}" if saved else f"/anime?{query}"
 
 
-def episode_overview(item: dict[str, Any], latest: list[Anime]) -> tuple[str, str]:
+def episode_overview(anime: Anime, current_episode: str, latest: list[Anime]) -> tuple[str, str]:
     """Ritorna (ultimo episodio disponibile, prossimo episodio da guardare)."""
-    anime_data = json.loads(str(item["anime_json"]))
-    anime = Anime.from_dict(anime_data)
-    current_episode = str(item["current_episode"])
     current = episode_value(current_episode)
     candidates = [
-        str(item["last_episode"]),
         anime.curr_ep,
         anime.last_ep,
         *(ep.num for ep in anime._episodes),
@@ -90,9 +70,8 @@ def episode_overview(item: dict[str, Any], latest: list[Anime]) -> tuple[str, st
         if next_number <= int(last_available):
             candidates.append(str(next_number))
 
-    threshold = current if current > 0 else 0
     next_playable = min(
-        (candidate for candidate in candidates if episode_value(candidate) > threshold),
+        (candidate for candidate in candidates if episode_value(candidate) > current),
         key=episode_value,
         default=current_episode,
     )

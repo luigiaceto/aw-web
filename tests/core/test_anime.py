@@ -1,5 +1,5 @@
 import pytest
-from aw_web.anime import Anime
+from aw_web.anime import Anime, AnimeStatus
 
 @pytest.fixture
 def anime():
@@ -21,7 +21,7 @@ def test_episode_equality_uses_anime_and_episode_number(anime: Anime):
     assert Anime.Episode(anime, "5", "ref5") == Anime.Episode(anime, "5", "other-ref")
     assert Anime.Episode(anime, "5", "ref5") != Anime.Episode(anime, "6", "ref6")
 
-def test_episodes_sorting(anime: Anime):
+def test_episodes_sorting_skips_specials(anime: Anime):
     episodes = {
         "12": "ref12",
         "5.5": "ref5.5",
@@ -35,5 +35,19 @@ def test_episodes_sorting(anime: Anime):
     }
     anime.update_episodes(episodes)
     anime.update_episodes({"5": "ref5"})
-    expected = ["0", "1", "2", "3-4", "5", "5.5", "6-7", "7.5", "10", "12"]
+    expected = ["1", "2", "3-4", "5", "6-7", "10", "12"]
     assert anime.episodes() == expected
+
+
+def test_anime_survives_the_round_trip_through_json():
+    # è il formato salvato nel database e passato nei form: non deve perdere nulla
+    anime = Anime("Frieren (ITA)", "4851-ita", curr_ep="3", last_ep="28")
+    anime.set_info(154587, AnimeStatus.FINISHED, {"Trama": "Trama", "Studio": "MADHOUSE"})
+    anime.update_episodes({"1": "21", "2": "22", "1-12": "batch"})
+    anime.cover_url = "https://img.example/poster.jpg"
+    anime.banner_url = "https://img.example/banner.jpg"
+
+    copy = Anime.from_dict(anime.to_dict())
+
+    assert copy.to_dict() == anime.to_dict()
+    assert copy.episode("2").ref == "22"

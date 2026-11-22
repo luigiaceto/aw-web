@@ -24,7 +24,6 @@ PORT = 8765
 _DB = LazyDatabase()
 DB = cast(WebDatabase, _DB)
 CSRF_TOKEN = token_urlsafe(32)
-CURRENT_PROVIDER: str = ""
 
 
 def reset_lazy_database() -> None:

@@ -6,6 +6,7 @@ import argparse
 import os
 import signal
 import sys
+import time
 import webbrowser
 from http.server import ThreadingHTTPServer
 from pathlib import Path
@@ -19,29 +20,25 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--reset-db",
         action="store_true",
-        help="Cancella il database locale di aw-web e termina.",
+        help="Sposta il database locale in un backup (al prossimo avvio ne viene creato uno nuovo) e termina.",
     )
     return parser
 
 
 def reset_database(path: Path) -> bool:
-    answer = input(f"Cancellare definitivamente il database locale in {path}? [yes/no] ")
+    answer = input(f"Resettare il database locale in {path}? Verrà salvato un backup. [yes/no] ")
     if answer.strip().lower() != "yes":
         print("Operazione annullata.")
         return False
 
     removed = path.exists()
+    # un backup per reset, con data e ora: un secondo reset non sovrascrive il primo
+    backup = path.with_name(f"{path.name}.{time.strftime('%Y%m%d-%H%M%S')}.bak")
     if removed:
-        # il backup resta accanto al database: un reset sbagliato non distrugge i progressi
-        path.replace(path.with_name(f"{path.name}.bak"))
-    for candidate in (Path(f"{path}-wal"), Path(f"{path}-shm")):
-        try:
-            candidate.unlink()
-        except FileNotFoundError:
-            pass
+        path.replace(backup)
 
     if removed:
-        print(f"Database locale cancellato: {path} (backup: {path}.bak)")
+        print(f"Database locale resettato. Backup: {backup}")
     else:
         print(f"Nessun database locale trovato in {path}")
     return removed
@@ -63,7 +60,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         print("Validazione database fallita")
         for error in db_result.errors:
             print(f"- {error}")
-        print("Esegui aw-web --reset-db per cancellare e ricreare il database locale")
+        print("Esegui aw-web --reset-db per resettare il database locale")
         sys.exit(1)
 
     from aw_web.web.server import WebHandler

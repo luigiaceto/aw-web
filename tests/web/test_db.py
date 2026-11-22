@@ -1,7 +1,22 @@
 import sqlite3
 
+import pytest
+
 from aw_web.anime import Anime
-from aw_web.web.db import WebDatabase, prepare_database, validate_database_schema
+from aw_web.web.utils import saved_anime
+from aw_web.web.db import CREATE_TABLE_STATEMENTS, WebDatabase, prepare_database, validate_database_schema
+
+WATCHLIST_SQL = CREATE_TABLE_STATEMENTS[0]
+
+
+def _with_watchlist(tmp_path, watchlist_sql):
+    """Database valido in cui la tabella watchlist è sostituita da `watchlist_sql`."""
+    db_path = tmp_path / "web.sqlite3"
+    WebDatabase(db_path)
+    with sqlite3.connect(db_path) as conn:
+        conn.execute("DROP TABLE watchlist")
+        conn.execute(watchlist_sql)
+    return db_path
 
 
 def test_prepare_database_creates_and_validates_new_database(tmp_path):
@@ -37,209 +52,46 @@ def test_validate_database_schema_fails_on_missing_table(tmp_path):
     assert "Tabella mancante: watch_history" in errors
 
 
-def test_validate_database_schema_fails_on_missing_column(tmp_path):
-    db_path = tmp_path / "web.sqlite3"
-    with sqlite3.connect(db_path) as conn:
-        conn.execute("CREATE TABLE watchlist (id INTEGER PRIMARY KEY AUTOINCREMENT)")
-        conn.execute(
-            """
-            CREATE TABLE cover_cache (
-                cache_key TEXT PRIMARY KEY,
-                anilist_id INTEGER NOT NULL DEFAULT 0,
-                title TEXT NOT NULL DEFAULT '',
-                cover_url TEXT NOT NULL DEFAULT '',
-                banner_url TEXT NOT NULL DEFAULT '',
-                color TEXT NOT NULL DEFAULT '',
-                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-            )
-            """
-        )
-        conn.execute(
-            """
-            CREATE TABLE favorites (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                provider TEXT NOT NULL,
-                name TEXT NOT NULL,
-                ref TEXT NOT NULL,
-                anilist_id INTEGER NOT NULL DEFAULT 0,
-                current_episode TEXT NOT NULL DEFAULT '0',
-                last_episode TEXT NOT NULL DEFAULT '0',
-                status TEXT NOT NULL DEFAULT 'Sconosciuto',
-                cover_url TEXT NOT NULL DEFAULT '',
-                banner_url TEXT NOT NULL DEFAULT '',
-                anime_json TEXT NOT NULL,
-                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                UNIQUE(provider, ref)
-            )
-            """
-        )
-        conn.execute(
-            """
-            CREATE TABLE watch_history (
-                provider TEXT NOT NULL,
-                name TEXT NOT NULL,
-                ref TEXT NOT NULL,
-                anilist_id INTEGER NOT NULL DEFAULT 0,
-                current_episode TEXT NOT NULL DEFAULT '0',
-                last_episode TEXT NOT NULL DEFAULT '0',
-                status TEXT NOT NULL DEFAULT 'Sconosciuto',
-                cover_url TEXT NOT NULL DEFAULT '',
-                banner_url TEXT NOT NULL DEFAULT '',
-                anime_json TEXT NOT NULL,
-                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                PRIMARY KEY(provider, ref)
-            )
-            """
-        )
-
-    errors = validate_database_schema(db_path)
-
-    assert "Colonna mancante in watchlist: provider" in errors
-
-
-def test_validate_database_schema_fails_on_extra_column(tmp_path):
-    db_path = tmp_path / "web.sqlite3"
-    WebDatabase(db_path)
-    with sqlite3.connect(db_path) as conn:
-        conn.execute("ALTER TABLE watchlist ADD COLUMN unexpected TEXT")
-
-    errors = validate_database_schema(db_path)
-
-    assert "Colonna non prevista in watchlist: unexpected" in errors
-
-
 def test_validate_database_schema_fails_on_extra_table(tmp_path):
     db_path = tmp_path / "web.sqlite3"
     WebDatabase(db_path)
     with sqlite3.connect(db_path) as conn:
-        conn.execute("CREATE TABLE episode_progress (id INTEGER PRIMARY KEY)")
+        conn.execute("CREATE TABLE unexpected_table (id INTEGER PRIMARY KEY)")
 
     errors = validate_database_schema(db_path)
 
-    assert "Tabella non prevista: episode_progress" in errors
+    assert "Tabella non prevista: unexpected_table" in errors
 
 
-def test_validate_database_schema_fails_on_missing_unique_constraint(tmp_path):
-    db_path = tmp_path / "web.sqlite3"
-    WebDatabase(db_path)
-    with sqlite3.connect(db_path) as conn:
-        conn.execute("ALTER TABLE watchlist RENAME TO watchlist_old")
-        conn.execute(
-            """
-            CREATE TABLE watchlist (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                provider TEXT NOT NULL,
-                name TEXT NOT NULL,
-                ref TEXT NOT NULL,
-                anilist_id INTEGER NOT NULL DEFAULT 0,
-                current_episode TEXT NOT NULL DEFAULT '0',
-                last_episode TEXT NOT NULL DEFAULT '0',
-                status TEXT NOT NULL DEFAULT 'Sconosciuto',
-                cover_url TEXT NOT NULL DEFAULT '',
-                banner_url TEXT NOT NULL DEFAULT '',
-                anime_json TEXT NOT NULL,
-                episodes_checked_at TEXT NOT NULL DEFAULT '',
-                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-            )
-            """
-        )
-        conn.execute("DROP TABLE watchlist_old")
+@pytest.mark.parametrize(
+    ("old", "new"),
+    [
+        ("        episodes_checked_at TEXT NOT NULL DEFAULT '',\n", ""),  # colonna mancante
+        ("anime_json TEXT NOT NULL,", "anime_json TEXT NOT NULL, extra TEXT,"),  # colonna in più
+        ("ref TEXT NOT NULL PRIMARY KEY", "ref TEXT NOT NULL"),  # chiave mancante
+        ("anime_json TEXT NOT NULL", "anime_json TEXT"),  # vincolo diverso
+    ],
+)
+def test_validate_database_schema_fails_on_a_changed_table(tmp_path, old, new):
+    assert old in WATCHLIST_SQL
+    db_path = _with_watchlist(tmp_path, WATCHLIST_SQL.replace(old, new))
 
     errors = validate_database_schema(db_path)
 
-    assert any("Indici non validi in watchlist" in error for error in errors)
-
-
-def test_validate_database_schema_fails_on_wrong_column_signature(tmp_path):
-    db_path = tmp_path / "web.sqlite3"
-    WebDatabase(db_path)
-    with sqlite3.connect(db_path) as conn:
-        conn.execute("ALTER TABLE watchlist RENAME TO watchlist_old")
-        conn.execute(
-            """
-            CREATE TABLE watchlist (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                provider TEXT,
-                name TEXT NOT NULL,
-                ref TEXT NOT NULL,
-                anilist_id INTEGER NOT NULL DEFAULT 0,
-                current_episode TEXT NOT NULL DEFAULT '0',
-                last_episode TEXT NOT NULL DEFAULT '0',
-                status TEXT NOT NULL DEFAULT 'Sconosciuto',
-                cover_url TEXT NOT NULL DEFAULT '',
-                banner_url TEXT NOT NULL DEFAULT '',
-                anime_json TEXT NOT NULL,
-                episodes_checked_at TEXT NOT NULL DEFAULT '',
-                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                UNIQUE(provider, ref)
-            )
-            """
-        )
-        conn.execute("DROP TABLE watchlist_old")
-
-    errors = validate_database_schema(db_path)
-
-    assert any("Firma colonna non valida in watchlist.provider" in error for error in errors)
-
-
-def test_validate_database_schema_accepts_same_columns_in_different_order(tmp_path):
-    db_path = tmp_path / "web.sqlite3"
-    WebDatabase(db_path)
-    with sqlite3.connect(db_path) as conn:
-        conn.execute("ALTER TABLE watchlist RENAME TO watchlist_old")
-        conn.execute(
-            """
-            CREATE TABLE watchlist (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                provider TEXT NOT NULL,
-                name TEXT NOT NULL,
-                ref TEXT NOT NULL,
-                anilist_id INTEGER NOT NULL DEFAULT 0,
-                current_episode TEXT NOT NULL DEFAULT '0',
-                last_episode TEXT NOT NULL DEFAULT '0',
-                status TEXT NOT NULL DEFAULT 'Sconosciuto',
-                cover_url TEXT NOT NULL DEFAULT '',
-                banner_url TEXT NOT NULL DEFAULT '',
-                anime_json TEXT NOT NULL,
-                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                episodes_checked_at TEXT NOT NULL DEFAULT '',
-                UNIQUE(provider, ref)
-            )
-            """
-        )
-        conn.execute("DROP TABLE watchlist_old")
-
-    errors = validate_database_schema(db_path)
-
-    assert errors == []
-
-
-def test_episode_progress_table_is_removed(tmp_path):
-    db = WebDatabase(tmp_path / "web.sqlite3")
-
-    with db.connect() as conn:
-        row = conn.execute(
-            "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'episode_progress'"
-        ).fetchone()
-
-    assert row is None
+    assert errors == ["Tabella diversa dallo schema atteso: watchlist"]
 
 
 def test_new_watch_item_starts_with_no_progress(tmp_path):
     db = WebDatabase(tmp_path / "web.sqlite3")
     anime = Anime("Test Anime", "test-ref", curr_ep="12", last_ep="12")
 
-    db.upsert_watch_item(provider="animeunity", anime_data=anime.to_dict())
+    db.upsert("watchlist", anime.to_dict())
 
-    item = db.find_watch_item("animeunity", "test-ref")
+    item = db.find("watchlist", "test-ref")
 
     assert item is not None
     assert item["current_episode"] == "0"
-    assert item["last_episode"] == "12"
+    assert saved_anime(item).last_ep == "12"
     assert item["episodes_checked_at"] == ""
 
 
@@ -247,65 +99,34 @@ def test_history_does_not_create_watch_item(tmp_path):
     db = WebDatabase(tmp_path / "web.sqlite3")
     anime = Anime("Test Anime", "test-ref", curr_ep="12", last_ep="12")
 
-    db.upsert_history_item(
-        provider="animeunity",
-        anime_data=anime.to_dict(),
-        current_episode="3",
-    )
+    db.upsert("watch_history", anime.to_dict(), "3")
 
-    history_item = db.find_history_item("animeunity", "test-ref")
+    history_item = db.find("watch_history", "test-ref")
 
     assert history_item is not None
     assert history_item["current_episode"] == "3"
-    assert db.find_watch_item("animeunity", "test-ref") is None
+    assert db.find("watchlist", "test-ref") is None
 
 
 def test_favorite_item_starts_with_no_progress(tmp_path):
     db = WebDatabase(tmp_path / "web.sqlite3")
     anime = Anime("Test Anime", "test-ref", curr_ep="12", last_ep="12")
 
-    db.upsert_favorite_item(provider="animeunity", anime_data=anime.to_dict())
+    db.upsert("favorites", anime.to_dict())
 
-    item = db.find_favorite_item("animeunity", "test-ref")
+    item = db.find("favorites", "test-ref")
 
     assert item is not None
     assert item["current_episode"] == "0"
-    assert item["last_episode"] == "12"
+    assert saved_anime(item).last_ep == "12"
 
 
-def test_recent_cover_cache_entry_is_returned(tmp_path):
-    db = WebDatabase(tmp_path / "web.sqlite3")
+def test_validate_database_schema_ignores_sqlite_internal_tables(tmp_path):
+    db_path = tmp_path / "web.sqlite3"
+    WebDatabase(db_path)
+    with sqlite3.connect(db_path) as conn:
+        conn.execute("CREATE TABLE counter (id INTEGER PRIMARY KEY AUTOINCREMENT)")  # crea sqlite_sequence
+        conn.execute("INSERT INTO counter DEFAULT VALUES")
+        conn.execute("DROP TABLE counter")
 
-    db.set_cover(
-        cache_key="anilist:1",
-        anilist_id=1,
-        title="Fresh",
-        cover_url="cover",
-        banner_url="banner",
-        color="#fff",
-    )
-
-    item = db.get_cover("anilist:1")
-
-    assert item is not None
-    assert item["cover_url"] == "cover"
-
-
-def test_expired_cover_cache_entry_is_removed(tmp_path):
-    db = WebDatabase(tmp_path / "web.sqlite3")
-    db.set_cover(
-        cache_key="anilist:2",
-        anilist_id=2,
-        title="Old",
-        cover_url="cover",
-        banner_url="banner",
-        color="#fff",
-    )
-    with db.connect() as conn:
-        conn.execute(
-            "UPDATE cover_cache SET updated_at = datetime('now', '-31 days') WHERE cache_key = ?",
-            ("anilist:2",),
-        )
-
-    assert db.get_cover("anilist:2") is None
-    assert db.get_cover("anilist:2") is None
+    assert validate_database_schema(db_path) == []

@@ -5,11 +5,12 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from aw_web.anime import Anime
-from aw_web.services.anilist import get_cover
+from aw_web.anime import Anime, AnimeStatus
 from aw_web.web.state import CSRF_TOKEN
 from aw_web.web.styles import CSS
-from aw_web.web.utils import anime_to_json, anime_url, episode_overview, episode_value, esc, q
+from aw_web.anime import episode_value
+from aw_web.services.anilist import SeasonalAnime
+from aw_web.web.utils import anime_to_json, anime_url, episode_overview, esc, q, saved_anime
 
 
 def csrf_input() -> str:
@@ -74,8 +75,8 @@ def page(title: str, body: str) -> bytes:
       <main>{body}</main>
       <script>
         (() => {{
-          function setPlayLoading(form) {{
-            const button = form.querySelector('button[type="submit"], button:not([type])');
+          function setPlayLoading(form, submitter) {{
+            const button = submitter || form.querySelector('button[type="submit"], button:not([type])');
             if (!button || button.dataset.playLoading === "1") return null;
             const state = {{
               button,
@@ -126,9 +127,10 @@ def page(title: str, body: str) -> bytes:
             throw new Error("Timeout durante l'apertura di MPV.");
           }}
 
-          async function submitPlayForm(form) {{
-            const state = setPlayLoading(form);
-            const body = new URLSearchParams(new FormData(form));
+          async function submitPlayForm(form, submitter) {{
+            // prima di setPlayLoading: un bottone disabilitato non entra nel FormData
+            const body = new URLSearchParams(new FormData(form, submitter));
+            const state = setPlayLoading(form, submitter);
             try {{
               const response = await fetch("/play/start", {{
                 method: "POST",
@@ -163,7 +165,7 @@ def page(title: str, body: str) -> bytes:
             if (!(form instanceof HTMLFormElement)) return;
             if (form.getAttribute("action") !== "/play") return;
             event.preventDefault();
-            submitPlayForm(form);
+            submitPlayForm(form, event.submitter);
           }}, true);
         }})();
       </script>
@@ -206,11 +208,11 @@ def _pill(label: str, class_name: str = "") -> str:
     return f'<span class="{classes}">{esc(label)}</span>'
 
 
-def _remove_form(action: str, item_id: object, label: str) -> str:
+def _remove_form(action: str, ref: str, label: str) -> str:
     return f"""
     <form action="{esc(action)}" method="post">
       {csrf_input()}
-      <input type="hidden" name="id" value="{esc(item_id)}">
+      <input type="hidden" name="ref" value="{esc(ref)}">
       <button class="secondary danger card-icon-action" type="submit" aria-label="{esc(label)}" title="{esc(label)}">
         {_trash_icon()}
       </button>
@@ -218,11 +220,10 @@ def _remove_form(action: str, item_id: object, label: str) -> str:
     """
 
 
-def _play_form_action(provider_name: str, anime: Anime, episode_num: str, label: str) -> str:
+def _play_form_action(anime: Anime, episode_num: str, label: str) -> str:
     return f"""
     <form action="/play" method="post">
       {csrf_input()}
-      <input type="hidden" name="provider" value="{esc(provider_name)}">
       <input type="hidden" name="anime" value="{esc(anime_to_json(anime))}">
       <input type="hidden" name="episode" value="{esc(episode_num)}">
       <button class="card-action play-action" type="submit">{_play_icon()}<span>{esc(label)}</span></button>
@@ -235,14 +236,12 @@ def _catalog_card(
     title: str,
     href: str,
     image: str,
-    badges: list[str],
+    badges: str,
     meta: str,
     description: str = "",
     actions: str = "",
     class_name: str = "",
-    badge_extra: str = "",
 ) -> str:
-    badge_html = "".join(_pill(badge) for badge in badges if badge) + badge_extra
     description_html = (
         f'<p class="hover-description">{esc(description)}</p>'
         if description
@@ -254,12 +253,12 @@ def _catalog_card(
       <div class="card-backdrop" aria-hidden="true">{_decorative_card_image(image)}</div>
       <div class="poster-frame">{image}</div>
       <div class="card-info">
-        <div class="badge-row">{badge_html}</div>
+        <div class="badge-row">{badges}</div>
         <h3>{esc(title)}</h3>
       </div>
       <div class="card-hover">
         <div class="hover-copy">
-          <div class="badge-row">{badge_html}</div>
+          <div class="badge-row">{badges}</div>
           <h3>{esc(title)}</h3>
           <p class="hover-meta">{esc(meta) if meta else 'Scheda anime'}</p>
           {description_html}
@@ -270,38 +269,37 @@ def _catalog_card(
     """
 
 
-def card(anime: Anime, provider_name: str, badge: str = "") -> str:
-    cover = get_cover(anime.anilist_id, anime.name, allow_title_lookup=False)
-    image = image_html(cover["cover_url"], anime.name)
-    href = anime_url(provider_name, anime)
+def card(anime: Anime, badge: str = "") -> str:
+    image = image_html(anime.cover_url, anime.name)
+    href = anime_url(anime)
     info = []
     if anime.curr_ep and anime.curr_ep != "0":
-        info.append(f"Ep. {esc(anime.curr_ep)}")
-    if anime.status.value != "Sconosciuto":
-        info.append(esc(anime.status.value))
+        info.append(f"Ep. {anime.curr_ep}")
+    if anime.status != AnimeStatus.UNKNOWN:
+        info.append(anime.status.value)
     actions = ""
     if badge == "Nuovo" and anime.curr_ep and anime.curr_ep != "0":
-        actions = _play_form_action(provider_name, anime, anime.curr_ep, f"Guarda episodio {anime.curr_ep}")
+        actions = _play_form_action(anime, anime.curr_ep, f"Guarda episodio {anime.curr_ep}")
     return _catalog_card(
         title=anime.name,
         href=href,
         image=image,
-        badges=[badge] if badge else [],
+        badges=_pill(badge) if badge else "",
         meta=_meta_text(info),
         description=_anime_description(anime),
         actions=actions,
     )
 
 
-def seasonal_card(item: Any, year: int, season: str) -> str:
-    genres = ", ".join(item.genres)
-    meta = []
-    if genres:
-        meta.append(esc(genres))
-    if item.episodes:
-        meta.append(f"{esc(item.episodes)} ep.")
-    if item.average_score:
-        meta.append(f"Voto AniList {esc(item.average_score)}%")
+def _anilist_meta(item: SeasonalAnime) -> str:
+    return _meta_text([
+        ", ".join(item.genres),
+        f"{item.episodes} ep." if item.episodes else "",
+        f"Voto AniList {item.average_score}%" if item.average_score else "",
+    ])
+
+
+def seasonal_card(item: SeasonalAnime, year: int, season: str) -> str:
     href = (
         f"/stagionali/apri?year={q(year)}&season={q(season)}"
         f"&anilist_id={q(item.anilist_id)}"
@@ -310,40 +308,31 @@ def seasonal_card(item: Any, year: int, season: str) -> str:
         title=item.title,
         href=href,
         image=image_html(item.cover_url, item.title),
-        badges=["Stagionale"],
-        meta=_meta_text(meta),
+        badges=_pill("Stagionale"),
+        meta=_anilist_meta(item),
         class_name="seasonal-card",
     )
 
 
-def anilist_card(item: Any, source: str, badge: str) -> str:
-    genres = ", ".join(item.genres)
-    meta = []
-    if genres:
-        meta.append(esc(genres))
-    if item.episodes:
-        meta.append(f"{esc(item.episodes)} ep.")
-    if item.average_score:
-        meta.append(f"Voto AniList {esc(item.average_score)}%")
+def anilist_card(item: SeasonalAnime, source: str, badge: str) -> str:
     href = f"/anilist/apri?source={q(source)}&anilist_id={q(item.anilist_id)}"
     return _catalog_card(
         title=item.title,
         href=href,
         image=image_html(item.cover_url, item.title),
-        badges=[badge],
-        meta=_meta_text(meta),
+        badges=_pill(badge),
+        meta=_anilist_meta(item),
         class_name="seasonal-card anilist-card",
     )
 
 
-def provider_match_card(anime: Anime, provider_name: str) -> str:
-    cover = get_cover(anime.anilist_id, anime.name, allow_title_lookup=False)
-    href = anime_url(provider_name, anime)
+def provider_match_card(anime: Anime) -> str:
+    href = anime_url(anime)
     return _catalog_card(
         title=anime.name,
         href=href,
-        image=image_html(cover["cover_url"], anime.name),
-        badges=[provider_name],
+        image=image_html(anime.cover_url, anime.name),
+        badges=_pill("AnimeUnity"),
         meta=f"Ep. {anime.curr_ep or '0'} / {anime.last_ep or '0'}",
         description=_anime_description(anime),
     )
@@ -352,10 +341,7 @@ def provider_match_card(anime: Anime, provider_name: str) -> str:
 def collection_toggle(
     *,
     action: str,
-    provider_name: str,
     anime: Anime,
-    cover_url: str,
-    banner_url: str,
     active: bool,
     kind: str,
     label: str,
@@ -364,10 +350,7 @@ def collection_toggle(
     return f"""
     <form class="icon-toggle-form" action="{esc(action)}" method="post">
       {csrf_input()}
-      <input type="hidden" name="provider" value="{esc(provider_name)}">
       <input type="hidden" name="anime" value="{esc(anime_to_json(anime))}">
-      <input type="hidden" name="cover_url" value="{esc(cover_url)}">
-      <input type="hidden" name="banner_url" value="{esc(banner_url)}">
       <button class="icon-toggle {'active' if active else ''}" type="submit" aria-label="{esc(label)}" title="{esc(label)}">
         {icon}
       </button>
@@ -420,62 +403,53 @@ def _heart_icon(active: bool) -> str:
 
 
 def favorite_card(item: dict[str, Any]) -> str:
-    anime_data = json.loads(str(item["anime_json"]))
-    anime = Anime.from_dict(anime_data)
-    cover_url = str(item.get("cover_url") or "")
-    href = anime_url(str(item["provider"]), anime)
-    meta = _meta_text([
-        str(item.get("status") or ""),
-        f"Ep. {item.get('current_episode') or anime.curr_ep or '0'} / {item.get('last_episode') or anime.last_ep or '0'}",
-    ])
-    actions = _remove_form("/favorites/remove", item["id"], "Rimuovi dai preferiti")
+    anime = saved_anime(item)
     return _catalog_card(
-        title=str(item["name"]),
-        href=href,
-        image=image_html(cover_url, str(item["name"])),
-        badges=["Preferito"],
-        meta=meta,
+        title=anime.name,
+        href=anime_url(anime),
+        image=image_html(anime.cover_url, anime.name),
+        badges=_pill("Preferito"),
+        meta=_meta_text([anime.status.value, f"Ep. {item['current_episode']} / {anime.last_ep}"]),
         description=_anime_description(anime),
-        actions=actions,
+        actions=_remove_form("/favorites/remove", anime.ref, "Rimuovi dai preferiti"),
         class_name="saved-card favorite-card",
     )
 
 
 def watch_card(item: dict[str, Any], latest: list[Anime]) -> str:
-    anime_data = json.loads(str(item["anime_json"]))
-    anime = Anime.from_dict(anime_data)
-    cover_url = str(item.get("cover_url") or "")
-    href = anime_url(str(item["provider"]), anime, saved=True)
+    anime = saved_anime(item)
     current_episode = str(item["current_episode"])
-    last_episode, playable_episode = episode_overview(item, latest)
-    new_episode_badge = (
-        '<span class="badge new-episode">Nuovo episodio</span>'
-        if episode_value(last_episode) > episode_value(current_episode)
-        else ""
-    )
-    play_label = "Inizia" if current_episode == "0" else "Riprendi"
-    meta = _meta_text([
-        f"Ep. {current_episode} / {last_episode}",
-        str(item.get("status") or ""),
-    ])
+    last_episode, playable_episode = episode_overview(anime, current_episode, latest)
+    badges = _pill("Watchlist")
+    if episode_value(last_episode) > episode_value(current_episode):
+        badges += _pill("Nuovo episodio", "new-episode")
     actions = (
-        _play_form_action(str(item["provider"]), anime, playable_episode, play_label)
-        + _remove_form("/watchlist/remove", item["id"], "Rimuovi dalla watchlist")
+        _play_form_action(anime, playable_episode, "Inizia" if current_episode == "0" else "Riprendi")
+        + _remove_form("/watchlist/remove", anime.ref, "Rimuovi dalla watchlist")
     )
     return _catalog_card(
-        title=str(item["name"]),
-        href=href,
-        image=image_html(cover_url, str(item["name"])),
-        badges=["Watchlist"],
-        meta=meta,
+        title=anime.name,
+        href=anime_url(anime, saved=True),
+        image=image_html(anime.cover_url, anime.name),
+        badges=badges,
+        meta=_meta_text([f"Ep. {current_episode} / {last_episode}", anime.status.value]),
         description=_anime_description(anime),
         actions=actions,
         class_name="saved-card watch-card",
-        badge_extra=new_episode_badge,
     )
 
 
-def episode_row(provider_name: str, anime: Anime, episode: Anime.Episode, current_episode: str) -> str:
+def episode_play_form(anime: Anime) -> str:
+    """Un solo form per pagina: i bottoni degli episodi lo usano con l'attributo form."""
+    return f"""
+    <form id="play-form" action="/play" method="post" hidden>
+      {csrf_input()}
+      <input type="hidden" name="anime" value="{esc(anime_to_json(anime))}">
+    </form>
+    """
+
+
+def episode_row(episode: Anime.Episode, current_episode: str) -> str:
     active = " active" if current_episode != "0" and episode.num == current_episode else ""
     return f"""
     <div class="episode{active}">
@@ -484,13 +458,7 @@ def episode_row(provider_name: str, anime: Anime, episode: Anime.Episode, curren
         {('<span class="badge">ultimo visto</span>' if active else '')}
       </div>
       <div class="row-actions compact">
-        <form action="/play" method="post">
-          {csrf_input()}
-          <input type="hidden" name="provider" value="{esc(provider_name)}">
-          <input type="hidden" name="anime" value="{esc(anime_to_json(anime))}">
-          <input type="hidden" name="episode" value="{esc(episode.num)}">
-          <button>Guarda</button>
-        </form>
+        <button form="play-form" name="episode" value="{esc(episode.num)}">Guarda</button>
       </div>
     </div>
     """

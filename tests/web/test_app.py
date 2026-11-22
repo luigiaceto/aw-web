@@ -4,20 +4,32 @@ from aw_web.web.app import main, reset_database
 from aw_web.web.db import WebDatabase
 
 
-def test_reset_database_removes_sqlite_files(tmp_path, monkeypatch):
+def test_reset_database_moves_the_database_to_a_backup(tmp_path, monkeypatch):
     db_path = tmp_path / "web.sqlite3"
     db_path.write_text("db")
-    tmp_path.joinpath("web.sqlite3-wal").write_text("wal")
-    tmp_path.joinpath("web.sqlite3-shm").write_text("shm")
     monkeypatch.setattr("builtins.input", lambda prompt: "yes")
 
     removed = reset_database(db_path)
 
     assert removed
     assert not db_path.exists()
-    assert not tmp_path.joinpath("web.sqlite3-wal").exists()
-    assert not tmp_path.joinpath("web.sqlite3-shm").exists()
-    assert tmp_path.joinpath("web.sqlite3.bak").read_text() == "db"
+    backups = list(tmp_path.glob("web.sqlite3.*.bak"))
+    assert [backup.read_text() for backup in backups] == ["db"]
+
+
+def test_second_reset_keeps_the_first_backup(tmp_path, monkeypatch):
+    db_path = tmp_path / "web.sqlite3"
+    monkeypatch.setattr("builtins.input", lambda prompt: "yes")
+    stamps = iter(["20260101-000000", "20260101-000001"])
+    monkeypatch.setattr("aw_web.web.app.time.strftime", lambda fmt: next(stamps))
+
+    db_path.write_text("progress")
+    reset_database(db_path)
+    db_path.write_text("empty")
+    reset_database(db_path)
+
+    backups = sorted(backup.read_text() for backup in tmp_path.glob("web.sqlite3.*.bak"))
+    assert backups == ["empty", "progress"]
 
 
 def test_reset_database_can_be_cancelled(tmp_path, monkeypatch):

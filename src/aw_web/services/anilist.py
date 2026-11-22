@@ -1,4 +1,4 @@
-"""AniList-backed seasonal anime and cover metadata."""
+"""AniList seasonal and ranked anime lists."""
 
 from __future__ import annotations
 
@@ -6,10 +6,10 @@ import re
 from dataclasses import dataclass
 from datetime import date
 from functools import lru_cache
+from typing import Any
 
 import httpx
 
-from aw_web.web.state import DB
 from aw_web.web.utils import parse_int
 
 
@@ -36,6 +36,18 @@ RANKED_LISTS = {
 }
 
 
+_MEDIA_FIELDS = """
+          id
+          title { romaji english native }
+          synonyms
+          coverImage { large extraLarge }
+          episodes
+          genres
+          averageScore
+          isAdult
+"""
+
+
 @dataclass(frozen=True)
 class SeasonalAnime:
     anilist_id: int
@@ -45,8 +57,6 @@ class SeasonalAnime:
     title_native: str
     synonyms: tuple[str, ...]
     cover_url: str
-    banner_url: str
-    status: str
     episodes: int
     genres: tuple[str, ...]
     average_score: int
@@ -60,12 +70,7 @@ class SeasonalAnime:
             *self.synonyms,
             self.title_native,
         ]
-        result: list[str] = []
-        for title in titles:
-            for clean in seasonal_title_variants(title):
-                if clean and clean not in result:
-                    result.append(clean)
-        return result
+        return list(dict.fromkeys(variant for title in titles for variant in seasonal_title_variants(title)))
 
 
 def current_season(today: date | None = None) -> tuple[int, str]:
@@ -75,16 +80,8 @@ def current_season(today: date | None = None) -> tuple[int, str]:
 
 
 def adjacent_season(year: int, season: str, offset: int) -> tuple[int, str]:
-    if season not in SEASON_ORDER:
-        season = current_season()[1]
-    position = SEASON_ORDER.index(season) + offset
-    while position < 0:
-        year -= 1
-        position += len(SEASON_ORDER)
-    while position >= len(SEASON_ORDER):
-        year += 1
-        position -= len(SEASON_ORDER)
-    return year, SEASON_ORDER[position]
+    years, position = divmod(SEASON_ORDER.index(season) + offset, len(SEASON_ORDER))
+    return year + years, SEASON_ORDER[position]
 
 
 def normalize_season(value: str) -> str:
@@ -96,9 +93,13 @@ def seasonal_label(season: str) -> str:
     return SEASON_LABELS.get(season, season.title())
 
 
-@lru_cache(maxsize=24)
 def seasonal_anime(year: int, season: str) -> tuple[SeasonalAnime, ...]:
-    season = normalize_season(season)
+    return _seasonal_anime(year, normalize_season(season), date.today().isoformat())
+
+
+@lru_cache(maxsize=24)
+def _seasonal_anime(year: int, season: str, day: str) -> tuple[SeasonalAnime, ...]:
+    """`day` fa parte della chiave di cache: le liste si aggiornano una volta al giorno."""
     query = """
     query ($year: Int, $season: MediaSeason, $page: Int) {
       Page(page: $page, perPage: 50) {
@@ -108,44 +109,27 @@ def seasonal_anime(year: int, season: str) -> tuple[SeasonalAnime, ...]:
           seasonYear: $year,
           season: $season,
           sort: [POPULARITY_DESC, TRENDING_DESC]
-        ) {
-          id
-          title { romaji english native }
-          synonyms
-          coverImage { large extraLarge }
-          bannerImage
-          status
-          episodes
-          genres
-          averageScore
-          isAdult
-        }
+        ) {""" + _MEDIA_FIELDS + """        }
       }
     }
     """
     return _fetch_media(query, {"year": year, "season": season}, max_pages=10)
 
 
-def _seasonal_from_media(data: dict[str, object]) -> SeasonalAnime:
-    title_data = data.get("title") if isinstance(data.get("title"), dict) else {}
-    cover_data = data.get("coverImage") if isinstance(data.get("coverImage"), dict) else {}
-    title_romaji = str(title_data.get("romaji") or "") if isinstance(title_data, dict) else ""
-    title_english = str(title_data.get("english") or "") if isinstance(title_data, dict) else ""
-    title_native = str(title_data.get("native") or "") if isinstance(title_data, dict) else ""
-    synonyms_data = data.get("synonyms")
-    genres_data = data.get("genres")
+def _seasonal_from_media(data: dict[str, Any]) -> SeasonalAnime:
+    titles = data.get("title") or {}
+    cover = data.get("coverImage") or {}
+    romaji, english, native = (str(titles.get(key) or "") for key in ("romaji", "english", "native"))
     return SeasonalAnime(
         anilist_id=parse_int(data.get("id")),
-        title=title_english or title_romaji or title_native,
-        title_romaji=title_romaji,
-        title_english=title_english,
-        title_native=title_native,
-        synonyms=tuple(str(item) for item in synonyms_data if item) if isinstance(synonyms_data, list) else (),
-        cover_url=str(cover_data.get("extraLarge") or cover_data.get("large") or "") if isinstance(cover_data, dict) else "",
-        banner_url=str(data.get("bannerImage") or ""),
-        status=str(data.get("status") or ""),
+        title=english or romaji or native,
+        title_romaji=romaji,
+        title_english=english,
+        title_native=native,
+        synonyms=tuple(str(synonym) for synonym in data.get("synonyms") or [] if synonym),
+        cover_url=str(cover.get("extraLarge") or cover.get("large") or ""),
         episodes=parse_int(data.get("episodes")),
-        genres=tuple(str(item) for item in genres_data[:3]) if isinstance(genres_data, list) else (),
+        genres=tuple(str(genre) for genre in (data.get("genres") or [])[:3]),
         average_score=parse_int(data.get("averageScore")),
     )
 
@@ -187,10 +171,7 @@ def _is_adult_media(data: dict[str, object]) -> bool:
 
 
 def seasonal_by_id(year: int, season: str, anilist_id: int) -> SeasonalAnime | None:
-    for anime in seasonal_anime(year, season):
-        if anime.anilist_id == anilist_id:
-            return anime
-    return None
+    return next((anime for anime in seasonal_anime(year, season) if anime.anilist_id == anilist_id), None)
 
 
 def normalize_ranked_list(value: str) -> str:
@@ -202,9 +183,13 @@ def ranked_list_label(slug: str) -> str:
     return str(RANKED_LISTS[normalize_ranked_list(slug)]["title"])
 
 
-@lru_cache(maxsize=8)
 def ranked_anime(slug: str) -> tuple[SeasonalAnime, ...]:
-    slug = normalize_ranked_list(slug)
+    return _ranked_anime(normalize_ranked_list(slug), date.today().isoformat())
+
+
+@lru_cache(maxsize=8)
+def _ranked_anime(slug: str, day: str) -> tuple[SeasonalAnime, ...]:
+    """`day` fa parte della chiave di cache: le liste si aggiornano una volta al giorno."""
     sort = str(RANKED_LISTS[slug]["sort"])
     query = """
     query ($page: Int, $sort: [MediaSort]) {
@@ -213,18 +198,7 @@ def ranked_anime(slug: str) -> tuple[SeasonalAnime, ...]:
         media(
           type: ANIME,
           sort: $sort
-        ) {
-          id
-          title { romaji english native }
-          synonyms
-          coverImage { large extraLarge }
-          bannerImage
-          status
-          episodes
-          genres
-          averageScore
-          isAdult
-        }
+        ) {""" + _MEDIA_FIELDS + """        }
       }
     }
     """
@@ -232,10 +206,7 @@ def ranked_anime(slug: str) -> tuple[SeasonalAnime, ...]:
 
 
 def ranked_by_id(slug: str, anilist_id: int) -> SeasonalAnime | None:
-    for anime in ranked_anime(slug):
-        if anime.anilist_id == anilist_id:
-            return anime
-    return None
+    return next((anime for anime in ranked_anime(slug) if anime.anilist_id == anilist_id), None)
 
 
 def seasonal_title_variants(title: str) -> list[str]:
@@ -244,107 +215,10 @@ def seasonal_title_variants(title: str) -> list[str]:
         return []
 
     variants = [clean]
-    season_match = re.search(r"(?i)(?:[-:]\s*)?(?:season|s)\s*(\d+)\s*$", clean)
-    if season_match:
-        number = season_match.group(1)
-        base = clean[: season_match.start()].strip(" -:")
-        if base:
-            variants.append(f"{base}- {number}")
-            variants.append(f"{base} {number}")
-            variants.append(base)
-
-    ordinal_match = re.search(r"(?i)(?:[-:]\s*)?(\d+)(?:st|nd|rd|th)\s+season\s*$", clean)
-    if ordinal_match:
-        number = ordinal_match.group(1)
-        base = clean[: ordinal_match.start()].strip(" -:")
-        if base:
-            variants.append(f"{base}- {number}")
-            variants.append(f"{base} {number}")
-            variants.append(base)
-
-    result: list[str] = []
-    for variant in variants:
-        if variant and variant not in result:
-            result.append(variant)
-    return result
-
-
-def cover_cache_key(anilist_id: int, title: str) -> str:
-    if anilist_id:
-        return f"anilist:{anilist_id}"
-    return f"title:{title.strip().lower()}"
-
-
-def get_cover(anilist_id: int, title: str, *, allow_title_lookup: bool = True) -> dict[str, str]:
-    empty_cover = {"cover_url": "", "banner_url": "", "color": ""}
-    key = cover_cache_key(anilist_id, title)
-    cached = DB.get_cover(key)
-    if cached:
-        return {
-            "cover_url": str(cached["cover_url"]),
-            "banner_url": str(cached["banner_url"]),
-            "color": str(cached["color"]),
-        }
-
-    if not anilist_id and (not title.strip() or not allow_title_lookup):
-        return {"cover_url": "", "banner_url": "", "color": ""}
-
-    if anilist_id:
-        query = """
-        query ($id: Int) {
-          Media(id: $id, type: ANIME) {
-            id
-            title { romaji english native }
-            coverImage { large extraLarge color }
-            bannerImage
-          }
-        }
-        """
-        variables: dict[str, object] = {"id": anilist_id}
-    else:
-        query = """
-        query ($search: String) {
-          Media(search: $search, type: ANIME) {
-            id
-            title { romaji english native }
-            coverImage { large extraLarge color }
-            bannerImage
-          }
-        }
-        """
-        variables = {"search": title}
-
-    try:
-        response = httpx.post(
-            "https://graphql.anilist.co",
-            json={"query": query, "variables": variables},
-            timeout=10,
-        )
-        response.raise_for_status()
-        media = response.json().get("data", {}).get("Media") or {}
-    except Exception:
-        return empty_cover
-
-    media_title = media.get("title") or {}
-    cover = media.get("coverImage") or {}
-    resolved_id = int(media.get("id") or anilist_id or 0)
-    resolved_title = (
-        media_title.get("english") or media_title.get("romaji") or media_title.get("native") or title
+    match = re.search(
+        r"(?i)(?:[-:]\s*)?(?:(?:season|s)\s*(\d+)|(\d+)(?:st|nd|rd|th)\s+season)\s*$", clean
     )
-    result = {
-        "cover_url": str(cover.get("extraLarge") or cover.get("large") or ""),
-        "banner_url": str(media.get("bannerImage") or ""),
-        "color": str(cover.get("color") or ""),
-    }
-    if not result["cover_url"]:
-        return result
-
-    DB.set_cover(
-        cache_key=key,
-        anilist_id=resolved_id,
-        title=str(resolved_title),
-        cover_url=result["cover_url"],
-        banner_url=result["banner_url"],
-        color=result["color"],
-    )
-    return result
+    if match and (base := clean[: match.start()].strip(" -:")):
+        number = match.group(1) or match.group(2)
+        variants += [f"{base}- {number}", f"{base} {number}", base]
+    return list(dict.fromkeys(variants))

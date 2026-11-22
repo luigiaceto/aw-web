@@ -14,8 +14,8 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from aw_web.anime import Anime
-from aw_web.services.progress import save_watch_progress
-from aw_web.services.providers import get_provider
+from aw_web.services.collections import save_watch_progress
+from aw_web.providers import PROVIDER
 
 
 _BLOCKED_HOSTS = {"localhost"}
@@ -188,34 +188,31 @@ def open_external_player(url: str, title: str) -> None:
             "MPV non trovato. Installa mpv oppure imposta AW_WEB_MPV_PATH con il percorso dell'eseguibile."
         )
 
-    ipc_path = _mpv_ipc_path() if hasattr(socket, "AF_UNIX") else ""
-    command = [player_path, f"--force-media-title={title}", "--fullscreen", "--keep-open"]
-    if ipc_path:
-        command.extend([f"--input-ipc-server={ipc_path}", "--idle=yes"])
-    else:
-        command.append(url)
+    ipc_path = _mpv_ipc_path()
+    command = [
+        player_path,
+        f"--force-media-title={title}",
+        "--fullscreen",
+        "--keep-open",
+        f"--input-ipc-server={ipc_path}",
+        "--idle=yes",
+    ]
     try:
         process = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     except OSError as exc:
         raise RuntimeError(f"Impossibile avviare MPV: {exc}") from exc
     try:
-        if ipc_path:
-            if not _wait_for_mpv_ready(ipc_path, process, url):
-                raise RuntimeError("MPV è aperto ma il video non è partito: progresso non salvato.")
+        if not _wait_for_mpv_ready(ipc_path, process, url):
+            raise RuntimeError("MPV è aperto ma il video non è partito: progresso non salvato.")
     finally:
-        if ipc_path:
-            try:
-                os.unlink(ipc_path)
-            except FileNotFoundError:
-                pass
+        Path(ipc_path).unlink(missing_ok=True)
 
 
-def play_episode(provider_name: str, anime: Anime, episode_num: str) -> None:
-    provider = get_provider(provider_name)
+def play_episode(anime: Anime, episode_num: str) -> None:
     if not anime.has_episode(episode_num):
-        provider.episodes(anime)
+        PROVIDER.episodes(anime)
 
     episode = anime.episode(episode_num)
-    url = provider.episode_link(anime, episode)
+    url = PROVIDER.episode_link(anime, episode)
     open_external_player(url, str(episode))
-    save_watch_progress(provider_name, anime, episode)
+    save_watch_progress(anime, episode)

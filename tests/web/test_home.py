@@ -5,6 +5,7 @@ import time
 from aw_web.anime import Anime
 from aw_web.web import views
 from aw_web.web.utils import anime_to_json
+from tests.helpers import saved_row
 
 
 class FakeProvider:
@@ -17,27 +18,14 @@ class FakeDB:
         self._watch_items = list(watch_items)
         self._favorite_items = list(favorite_items)
 
-    def watchlist(self):
-        return self._watch_items
-
-    def favorites(self):
-        return self._favorite_items
+    def items(self, table):
+        return {"watchlist": self._watch_items, "favorites": self._favorite_items}[table]
 
 
 def _watch_item(item_id: int, name: str, *, cover_url: str = "", banner_url: str = ""):
     anime = Anime(name, f"ref-{item_id}", curr_ep="1", last_ep="12")
-    return {
-        "id": item_id,
-        "provider": "animeunity",
-        "name": anime.name,
-        "ref": anime.ref,
-        "current_episode": "1",
-        "last_episode": "12",
-        "status": "In corso",
-        "cover_url": cover_url,
-        "banner_url": banner_url,
-        "anime_json": anime_to_json(anime),
-    }
+    anime.cover_url, anime.banner_url = cover_url, banner_url
+    return saved_row(anime, "1")
 
 
 def test_home_uses_all_watchlist_images_for_hero_slideshow(monkeypatch):
@@ -50,7 +38,7 @@ def test_home_uses_all_watchlist_images_for_hero_slideshow(monkeypatch):
         _watch_item(4, "Favorite", banner_url="https://img.example/favorite.jpg"),
     ]
     monkeypatch.setattr(views, "DB", FakeDB(watch_items, favorite_items))
-    monkeypatch.setattr(views, "get_provider", lambda _: FakeProvider())
+    monkeypatch.setattr(views, "PROVIDER", FakeProvider())
     monkeypatch.setattr(views, "refresh_watchlist_availability", lambda *args, **kwargs: None)
 
     html = views.render_home().decode()
@@ -69,7 +57,7 @@ def test_home_static_hero_slide_when_watchlist_has_one_image(monkeypatch):
         "DB",
         FakeDB([_watch_item(1, "Only", banner_url="https://img.example/only.jpg")]),
     )
-    monkeypatch.setattr(views, "get_provider", lambda _: FakeProvider())
+    monkeypatch.setattr(views, "PROVIDER", FakeProvider())
     monkeypatch.setattr(views, "refresh_watchlist_availability", lambda *args, **kwargs: None)
 
     html = views.render_home().decode()
@@ -118,24 +106,13 @@ def test_watchlist_cards_payload_reports_refresh_state(monkeypatch):
 
 def test_watchlist_cards_payload_shows_the_refreshed_episode(monkeypatch):
     anime = Anime("First", "ref-1", curr_ep="12", last_ep="12")
-    item = {
-        "id": 1,
-        "provider": "animeunity",
-        "name": anime.name,
-        "ref": anime.ref,
-        "current_episode": "12",
-        "last_episode": "12",
-        "status": "In corso",
-        "cover_url": "",
-        "banner_url": "",
-        "anime_json": anime_to_json(anime),
-    }
+    item = saved_row(anime, "12")
     monkeypatch.setattr(views, "DB", FakeDB([item]))
 
     assert "Nuovo episodio" not in json.loads(views.watchlist_cards_payload())["html"]
 
     refreshed = Anime("First", "ref-1", curr_ep="12", last_ep="13")
-    item["last_episode"] = "13"
     item["anime_json"] = anime_to_json(refreshed)
 
     assert "Nuovo episodio" in json.loads(views.watchlist_cards_payload())["html"]
+
